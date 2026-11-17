@@ -363,6 +363,7 @@ function tabDetails(ev,cap){
   <div class="panel" style="margin-top:16px"><div class="fields">${txt(ev,'Internal notes','notes','What the client asked for, budget, anything the team should know')}</div></div>
   <div class="row" style="margin-top:16px;justify-content:flex-end"><button class="btn danger ${S.delArm?'armed':''}" data-act="delete-event" ${S.readOnly?'disabled':''}>${S.delArm?'Click again to delete for good':'Delete event'}</button></div>`;
 }
+function descRows(t){t=String(t||'');return Math.max(1,Math.min(8,Math.ceil(t.length/55)+(t.match(/\n/g)||[]).length))}
 function catalogOptions(){
   return CATS.map(cat=>{const items=S.config.catalog.filter(i=>i.category===cat);return items.length?`<optgroup label="${esc(cat)}">${items.map(i=>`<option value="${esc(i.id)}" ${S.addItemSel===i.id?'selected':''}>${esc(i.name)} — ${money(i.price)} ${esc(i.unit)}</option>`).join('')}</optgroup>`:''}).join('');
 }
@@ -381,15 +382,16 @@ function totalsBlock(t,ev){
 function tabProposal(ev,t){
   const ro=S.readOnly?'disabled':'';
   const rows=(ev.items||[]).map((it,i)=>`<tr>
-    <td><input class="cell-in" type="text" id="it-${i}-name" data-bind="items.${i}.name" value="${esc(it.name)}" aria-label="Item name" ${ro}><input class="cell-in" type="text" id="it-${i}-desc" data-bind="items.${i}.desc" value="${esc(it.desc||'')}" placeholder="Choices / details (shown to client)" aria-label="Item details" style="margin-top:4px;font-size:12px;color:var(--muted)" ${ro}>${it.unit==='per person per hour'?`<div class="muted" style="font-size:11px;margin-top:2px">Qty = guests × hours</div>`:''}</td>
-    <td><select class="cell-in" id="it-${i}-cat" data-bind="items.${i}.category" aria-label="Category" ${ro}>${CATS.map(c=>`<option ${c===it.category?'selected':''}>${c}</option>`).join('')}</select></td>
-    <td><select class="cell-in" id="it-${i}-unit" data-bind="items.${i}.unit" aria-label="Unit" ${ro}>${UNITS.map(u=>`<option ${u===it.unit?'selected':''}>${u}</option>`).join('')}</select></td>
+    <td><input class="cell-in" type="text" id="it-${i}-name" data-bind="items.${i}.name" value="${esc(it.name)}" aria-label="Item name" ${ro}><textarea class="cell-in desc-box" id="it-${i}-desc" data-bind="items.${i}.desc" rows="${descRows(it.desc)}" title="${esc(it.desc||'')}" placeholder="Choices / details (shown to client)" aria-label="Item details" ${ro}>${esc(it.desc||'')}</textarea>${it.unit==='per person per hour'?`<div class="muted" style="font-size:11px;margin-top:2px">Qty = guests × hours</div>`:''}</td>
+    <td><select class="cell-in" id="it-${i}-cat" data-bind="items.${i}.category" aria-label="Category" style="min-width:120px" ${ro}>${CATS.map(c=>`<option ${c===it.category?'selected':''}>${c}</option>`).join('')}</select></td>
+    <td><select class="cell-in" id="it-${i}-unit" data-bind="items.${i}.unit" aria-label="Unit" style="min-width:170px" ${ro}>${UNITS.map(u=>`<option ${u===it.unit?'selected':''}>${u}</option>`).join('')}</select></td>
     <td class="num"><input class="cell-in" type="number" step="any" min="0" id="it-${i}-price" data-type="num" data-bind="items.${i}.price" value="${num(it.price)}" style="width:90px" aria-label="Price" ${ro}></td>
     <td class="num"><input class="cell-in" type="number" step="any" min="0" id="it-${i}-qty" data-type="num" data-bind="items.${i}.qty" value="${num(it.qty)}" style="width:72px" aria-label="Quantity" ${ro}></td>
     <td class="num">${money(num(it.price)*num(it.qty))}</td>
     <td class="num" style="white-space:nowrap">${(it.unit==='per person'||it.unit==='per person per hour')&&num(it.qty)!==defaultQty(ev,it.unit)?`<button class="btn sm" data-act="sync-qty" data-i="${i}" title="Reset quantity from guest count${it.unit==='per person per hour'?' and event length':''}" ${ro}>= ${it.unit==='per person'?num(ev.guests)+' guests':num(ev.guests)+' × '+eventHours(ev)+' hrs'}</button> `:''}<button class="btn sm danger" data-act="del-item" data-i="${i}" aria-label="Remove line" ${ro}>Remove</button></td></tr>`).join('');
   return `<div class="panel"><div class="row between" style="margin-bottom:12px"><h3>Menu, packages &amp; rentals</h3>
     <div class="row"><select id="add-cat-item" data-ui="addItemSel" aria-label="Choose from menu" style="width:auto;max-width:340px" ${ro}>${catalogOptions()}</select><button class="btn primary" data-act="add-item" ${ro}>Add</button><button class="btn" data-act="add-custom" ${ro}>Custom line</button></div></div>
+    ${(()=>{const c=S.config.catalog.find(x=>x.id===(S.addItemSel||(S.config.catalog[0]||{}).id));return c?`<div class="pick-preview"><b>${esc(c.name)}</b> · ${money(c.price)} ${esc(c.unit)}${c.desc?`<div>${esc(c.desc)}</div>`:''}</div>`:''})()}
     <div class="tbl-wrap"><table><thead><tr><th>Item</th><th>Category</th><th>Unit</th><th class="num">Price</th><th class="num">Qty</th><th class="num">Line total</th><th></th></tr></thead><tbody>${rows||'<tr><td colspan="7" class="empty">No items yet. Pick from the menu above. Per-person items start at the guest count.</td></tr>'}</tbody></table></div>
   </div>
   <div class="grid2" style="margin-top:16px">
@@ -564,7 +566,7 @@ function renderSettings(){
     </tbody></table></div></div>
   <div class="panel" style="margin-bottom:16px"><div class="row between" style="margin-bottom:10px"><h3>Menu, packages &amp; rentals</h3><button class="btn sm" data-act="s-add-item" ${ro}>Add item</button></div>
     <div class="tbl-wrap"><table><thead><tr><th>Name &amp; details</th><th>Category</th><th>Unit</th><th class="num">Price</th><th></th></tr></thead><tbody>
-    ${d.catalog.map((c,i)=>`<tr><td>${sIn(`catalog.${i}.name`)}<input class="cell-in" id="s-catalog-${i}-desc" type="text" data-sbind="catalog.${i}.desc" value="${esc(c.desc||'')}" placeholder="Choices / details shown to clients" aria-label="Details" style="margin-top:4px;font-size:12px" ${ro}></td><td><select class="cell-in" id="s-catalog-${i}-category" data-sbind="catalog.${i}.category" aria-label="Category" ${ro}>${CATS.map(x=>`<option ${x===c.category?'selected':''}>${x}</option>`).join('')}</select></td><td><select class="cell-in" id="s-catalog-${i}-unit" data-sbind="catalog.${i}.unit" aria-label="Unit" ${ro}>${UNITS.map(x=>`<option ${x===c.unit?'selected':''}>${x}</option>`).join('')}</select></td><td class="num">${sIn(`catalog.${i}.price`,'number','100px')}</td><td class="num"><button class="btn sm danger" data-act="s-del-item" data-i="${i}" ${ro}>Remove</button></td></tr>`).join('')}
+    ${d.catalog.map((c,i)=>`<tr><td>${sIn(`catalog.${i}.name`)}<textarea class="cell-in desc-box" id="s-catalog-${i}-desc" data-sbind="catalog.${i}.desc" rows="${descRows(c.desc)}" title="${esc(c.desc||'')}" placeholder="Choices / details shown to clients" aria-label="Details" ${ro}>${esc(c.desc||'')}</textarea></td><td><select class="cell-in" id="s-catalog-${i}-category" data-sbind="catalog.${i}.category" aria-label="Category" ${ro}>${CATS.map(x=>`<option ${x===c.category?'selected':''}>${x}</option>`).join('')}</select></td><td><select class="cell-in" id="s-catalog-${i}-unit" data-sbind="catalog.${i}.unit" aria-label="Unit" ${ro}>${UNITS.map(x=>`<option ${x===c.unit?'selected':''}>${x}</option>`).join('')}</select></td><td class="num">${sIn(`catalog.${i}.price`,'number','100px')}</td><td class="num"><button class="btn sm danger" data-act="s-del-item" data-i="${i}" ${ro}>Remove</button></td></tr>`).join('')}
     </tbody></table></div></div>
   <div class="panel" style="margin-bottom:16px"><h3>Lists (one per line)</h3><div class="fields">
     ${[['staff','Event managers'],['eventTypes','Event types'],['sources','Lead sources'],['lostReasons','Lost reasons']].map(([k,l])=>`<div class="f"><label for="s-list-${k}">${l}</label><textarea id="s-list-${k}" data-slist="${k}" style="min-height:130px" ${ro}>${esc(d[k].join('\n'))}</textarea></div>`).join('')}
@@ -633,7 +635,7 @@ function readLogo(file){
   fr.readAsDataURL(file);
 }
 /* ---------- events: inputs ---------- */
-document.addEventListener('input',e=>{if(e.target.matches('[data-bind],[data-sbind],[data-slist]'))e.target.dataset.dirty='1';
+document.addEventListener('input',e=>{if(e.target.classList&&e.target.classList.contains('desc-box'))e.target.rows=descRows(e.target.value);if(e.target.matches('[data-bind],[data-sbind],[data-slist]'))e.target.dataset.dirty='1';
   if(e.target.dataset.ui==='listQ'){S.listQ=e.target.value;scheduleRender();}});
 document.addEventListener('change',e=>{
   const t=e.target;
