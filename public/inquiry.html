@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Private Events at Bandstand Brew Works</title>
+<link rel="icon" href="/logo.webp">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body class="public-page">
+<div class="public-wrap"><div class="public" id="root" style="margin:0 auto">
+  <div class="public-top"><div class="brand-logo" style="margin-bottom:10px"><img src="/logo.webp" alt="Bandstand Brew Works"></div><div class="tagline" style="font-size:18px">Where Community Gathers</div><div>Plan a private event with live music</div></div>
+  <div style="padding:22px 26px" class="muted">Loading…</div>
+</div></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.0/dist/umd/supabase.js"></script>
+<script src="/config.js"></script>
+<script src="/core.js"></script>
+<script>
+const TYPES=['Private party','Corporate','Wedding / rehearsal','Birthday','Fundraiser','Holiday party','Other'];
+let cfg={venueName:'Bandstand Brew Works',tagline:'Where Community Gathers',logo:'',eventTypes:TYPES,spaces:[]};
+const root=document.getElementById('root');
+function pageTop(sub){return `<div class="public-top"><div class="brand-logo" style="margin-bottom:10px"><img src="${logoUrl(cfg)}" alt="${esc(cfg.venueName)}"></div><div class="tagline" style="font-size:18px">${esc(cfg.tagline)}</div><div>${sub}</div></div>`}
+function form(msg){
+  const t=todayISO();
+  root.innerHTML=pageTop('Plan a private event with live music')+`<form id="inq" novalidate><div class="fields">
+    <div class="f"><label for="q-name">Your name</label><input type="text" id="q-name" name="name" required autocomplete="name"></div>
+    <div class="f"><label for="q-company">Company (optional)</label><input type="text" id="q-company" name="company" autocomplete="organization"></div>
+    <div class="f"><label for="q-email">Email</label><input type="email" id="q-email" name="email" required autocomplete="email"></div>
+    <div class="f"><label for="q-phone">Phone</label><input type="tel" id="q-phone" name="phone" autocomplete="tel"></div>
+    <div class="f"><label for="q-type">Type of event</label><select id="q-type" name="type">${(cfg.eventTypes&&cfg.eventTypes.length?cfg.eventTypes:TYPES).map(x=>`<option>${esc(x)}</option>`).join('')}</select></div>
+    <div class="f"><label for="q-guests">Number of guests</label><input type="number" id="q-guests" name="guests" min="1" value="50" required></div>
+    <div class="f"><label for="q-date">Preferred date</label><input type="date" id="q-date" name="date" min="${t}" required></div>
+    <div class="f"><label for="q-alt">Backup date (optional)</label><input type="date" id="q-alt" name="alt" min="${t}"></div>
+    <div class="f"><label for="q-start">Start time</label><input type="time" id="q-start" name="start" value="18:00"></div>
+    <div class="f"><label for="q-end">End time</label><input type="time" id="q-end" name="end" value="22:00"></div>
+    <div class="f"><label for="q-space">Space you’re interested in</label><select id="q-space" name="space"><option value="">Not sure yet</option>${(cfg.spaces||[]).map(s=>`<option value="${esc(s.id)}">${esc(s.name)}${num(s.standing)?` (up to ${num(s.standing)})`:''}</option>`).join('')}</select></div>
+    <div class="f"><label for="q-heard">How did you hear about us?</label><select id="q-heard" name="heard">${['Website / Google','Social media','Saw a show here','Friend or referral','Been to an event here','Other'].map(o=>`<option>${o}</option>`).join('')}</select></div>
+    <div class="f wide"><label for="q-msg">Tell us about your event</label><textarea id="q-msg" name="msg" maxlength="2000" placeholder="Live band or DJ? Food and drinks you have in mind? Budget?"></textarea></div>
+    <div class="hp" aria-hidden="true"><label for="q-website">Leave this empty</label><input type="text" id="q-website" name="website" tabindex="-1" autocomplete="off"></div>
+  </div>${msg?`<p class="flag">${esc(msg)}</p>`:''}<div><button class="btn primary" type="submit">Send inquiry</button></div></form>`;
+}
+function done(){root.innerHTML=pageTop('Private events')+`<div style="padding:26px"><h2>Thanks! We got your request.</h2><p class="muted">Someone from our events team will get back to you within one business day.</p><button class="btn" id="again">Send another request</button></div>`;document.getElementById('again').onclick=()=>form()}
+document.addEventListener('submit',async e=>{
+  e.preventDefault();const f=e.target,fd=Object.fromEntries(new FormData(f).entries());
+  if(!fd.name.trim()||!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(fd.email)||!fd.date){form('Please fill in your name, a valid email and a date.');restore(null,fd);return;}
+  const b=f.querySelector('button[type=submit]');b.disabled=true;b.textContent='Sending…';
+  const sb=supa();
+  const {error}=sb?await sb.rpc('pe_submit_inquiry',{p:fd}):{error:{message:'This form isn’t connected yet. Please call or email us.'}};
+  if(error){form(error.message||'Something went wrong. Please try again.');restore(document.getElementById('inq'),fd);return;}
+  done();try{window.parent!==window&&window.parent.postMessage({bandstandInquiry:'sent'},'*')}catch(_){}
+});
+function restore(f,fd){if(!f)f=document.getElementById('inq');Object.entries(fd).forEach(([k,v])=>{const el=f.elements[k];if(el)el.value=v})}
+(async()=>{const sb=supa();if(sb){const {data}=await sb.rpc('pe_public_settings');if(data)cfg=Object.assign(cfg,data);}form();})();
+</script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+{
+  "name": "bandstand-events",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Bandstand Brew Works private events: inquiries, proposals, BEOs, contracts and payments.",
+  "scripts": {
+    "build": "node scripts/build.mjs"
+  },
+  "engines": { "node": ">=18" }
+}

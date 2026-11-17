@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Your Event Proposal · Bandstand Brew Works</title>
+<link rel="icon" href="/logo.webp">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body class="public-page">
+<div class="public-wrap" style="max-width:940px"><div id="root" class="sheet"><p class="muted">Loading your proposal…</p></div></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.0/dist/umd/supabase.js"></script>
+<script src="/config.js"></script>
+<script src="/core.js"></script>
+<script>
+const root=document.getElementById('root');
+const token=new URLSearchParams(location.search).get('t')||'';
+let P=null,msg='';
+function totalsBlock(t,ev){
+  return `<div class="totals">
+    <span>Food &amp; beverage</span><span>${money(t.fb)}</span>
+    ${t.shortfall?`<span>Food &amp; beverage minimum (${money0(t.fbMin)})</span><span>${money(t.shortfall)}</span>`:''}
+    ${t.other?`<span>Rentals, AV &amp; entertainment</span><span>${money(t.other)}</span>`:''}
+    ${t.roomFee?`<span>Room fee</span><span>${money(t.roomFee)}</span>`:''}
+    <span>Service charge (${num(ev.serviceRate)}%)</span><span>${money(t.service)}</span>
+    <span>Sales tax (${num(ev.taxRate)}%)</span><span>${money(t.tax)}</span>
+    <span class="t">Total</span><span class="t">${money(t.total)}</span>
+    <span>Deposit due at signing (${num(ev.depositPct)}%)</span><span>${money(t.depositDue)}</span>
+    ${t.paid?`<span>Paid so far</span><span>${money(t.paid)}</span><span><b>Balance</b></span><span><b>${money(t.balance)}</b></span>`:''}
+  </div>`;
+}
+function render(){
+  if(!P){root.innerHTML=`<h2>Proposal not found</h2><p class="muted">This link may be mistyped or no longer active. Please contact our events team.</p>`;return;}
+  const ev=P.event,cfg=P.settings,c=ev.contract||{},t=totals(ev),inv=safeUrl(ev.toast&&ev.toast.invoiceUrl);
+  document.title=`${ev.title||'Event proposal'} · ${cfg.venueName}`;
+  const payNeeded=t.total>0&&!t.depositMet?r2(t.depositDue-t.paid):(t.total>0&&t.balance>0.005?t.balance:0);
+  const due=ev.date?addDays(ev.date,-num(cfg.balanceDueDays)):'';
+  root.innerHTML=`
+  <div class="sheet-head"><div><img class="doc-logo" src="${logoUrl(cfg)}" alt="${esc(cfg.venueName)}"><div class="tagline">${esc(cfg.tagline)}</div><div class="muted">Event proposal &amp; agreement</div></div>
+    <div style="text-align:right">Prepared for<br><b>${esc(ev.client&&ev.client.name||'')}</b>${ev.client&&ev.client.company?`<div class="muted">${esc(ev.client.company)}</div>`:''}</div></div>
+  <div class="kv"><div><span>Event</span>${esc(ev.title)}</div><div><span>Date</span>${esc(fmtDate(ev.date,true))}</div><div><span>Time</span>${esc(fmtTime(ev.start))}–${esc(fmtTime(ev.end))}</div><div><span>Guests</span>${num(ev.guests)}</div><div><span>Space</span>${esc((ev.spaceNames||[]).join(', ')||'To be confirmed')}</div><div><span>Your contact</span>${esc(ev.owner||cfg.venueName)}</div></div>
+  <section><h3>What’s included</h3>${(ev.items||[]).length?`<div class="tbl-wrap"><table><thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Price</th><th class="num">Amount</th></tr></thead><tbody>${ev.items.map(i=>`<tr><td>${esc(i.name)}</td><td class="num">${num(i.qty)}</td><td class="num">${money(i.price)} <span class="muted" style="font-size:11px">${esc(i.unit)}</span></td><td class="num">${money(num(i.price)*num(i.qty))}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted">Menu to be confirmed.</p>'}
+    <div style="margin-top:14px">${totalsBlock(t,ev)}</div></section>
+  <section><h3>Terms</h3><div class="terms">${esc(cfg.terms||'')}</div></section>
+  <section><h3>Signature</h3>${c.signedAt?`<div class="sign-box"><div class="signed">${esc(c.signedName)}</div><div class="muted">Signed electronically ${esc(fmtTS(c.signedAt))}</div></div>`:
+    `<form class="sign-box" id="sign"><div class="f"><label for="sign-name">Type your full name to sign</label><input type="text" id="sign-name" name="name" required minlength="2" value="${esc(ev.client&&ev.client.name||'')}"></div>
+    <label class="check" for="sign-agree" style="margin:12px 0"><input type="checkbox" id="sign-agree" name="agree" required> I agree to the terms above and the total shown.</label>
+    ${msg?`<p class="flag">${esc(msg)}</p>`:''}<button class="btn primary" type="submit">Accept &amp; sign</button></form>`}</section>
+  <section><h3>Payment</h3>${payNeeded>0?`<p>${t.depositMet?`Remaining balance${due?` (due by ${esc(fmtShort(due))})`:''}`:'Deposit to hold your date'}: <b>${money(payNeeded)}</b></p>
+    ${inv?`<a class="btn primary" href="${esc(inv)}" target="_blank" rel="noopener">Pay ${money(payNeeded)} securely with Toast</a><p class="muted" style="font-size:12px">Opens our Toast invoice${ev.toast.invoiceNumber?' #'+esc(ev.toast.invoiceNumber):''} in a new tab. Your balance here updates once our team confirms the payment.</p>`:'<p class="muted">Your event manager will send you a secure Toast payment link.</p>'}`:
+    (t.total>0?`<p class="flag ok" style="display:inline-block">Paid in full. Thank you!</p>`:'<p class="muted">Pricing to be confirmed.</p>')}</section>
+  <p class="muted no-print" style="font-size:12px">Questions? Reply to your event manager’s email. ${esc(cfg.venueName)} · ${esc(cfg.tagline)}</p>`;
+}
+document.addEventListener('submit',async e=>{
+  e.preventDefault();const fd=Object.fromEntries(new FormData(e.target).entries());
+  if(!fd.agree||String(fd.name||'').trim().length<2){msg='Type your full name and check the box to sign.';render();return;}
+  const b=e.target.querySelector('button');b.disabled=true;b.textContent='Signing…';
+  const {data,error}=await supa().rpc('pe_sign_proposal',{p_token:token,p_name:fd.name});
+  if(error){msg=error.message||'Could not sign. Please try again.';render();return;}
+  msg='';P=data;render();
+});
+(async()=>{
+  const sb=supa();
+  if(!sb||!/^[0-9a-f-]{36}$/i.test(token)){render();return;}
+  const {data,error}=await sb.rpc('pe_get_proposal',{p_token:token});
+  P=error?null:data;render();
+})();
+</script>
+</body>
+</html>
