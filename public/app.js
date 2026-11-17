@@ -4,7 +4,7 @@
 const ACTIVE=['Lead','Proposal Sent','Tentative','Definite'];
 const BLOCKING=['Tentative','Definite'];
 const CATS=['Food','Beverage','Rental / AV','Entertainment','Other'];
-const UNITS=['per person','each','per hour','flat'];
+const UNITS=['per person','per person per hour','each','per hour','flat'];
 const METHODS=['Toast invoice (paid online)','Toast POS (card in person)','Cash','Check','ACH / bank transfer'];
 const DEFAULT_CONFIG={
   venueName:'Bandstand Brew Works',
@@ -18,27 +18,24 @@ const DEFAULT_CONFIG={
     {id:'full',name:'Full Buyout',seated:0,standing:0,roomFee:0,fbMin:0,buyout:true}
   ],
   catalog:[
-    {id:'c1',name:'Passed appetizers (3 selections)',category:'Food',unit:'per person',price:18},
-    {id:'c2',name:'Taco & nacho bar',category:'Food',unit:'per person',price:22},
-    {id:'c3',name:'Pizza & salad buffet',category:'Food',unit:'per person',price:20},
-    {id:'c4',name:'Dessert station',category:'Food',unit:'per person',price:8},
-    {id:'c5',name:'Beer & wine package (2 hrs)',category:'Beverage',unit:'per person',price:28},
-    {id:'c6',name:'Full bar package (3 hrs)',category:'Beverage',unit:'per person',price:42},
-    {id:'c7',name:'Drink tickets',category:'Beverage',unit:'each',price:9},
-    {id:'c8',name:'Keg, local craft (1/2 bbl)',category:'Beverage',unit:'each',price:425},
-    {id:'c9',name:'Non-alcoholic package',category:'Beverage',unit:'per person',price:6},
-    {id:'c10',name:'House sound + engineer',category:'Rental / AV',unit:'per hour',price:75},
-    {id:'c11',name:'Projector & screen',category:'Rental / AV',unit:'flat',price:150},
-    {id:'c12',name:'Stage lighting package',category:'Rental / AV',unit:'flat',price:250},
-    {id:'c13',name:'House band (3 hrs)',category:'Entertainment',unit:'flat',price:1800},
-    {id:'c14',name:'DJ (4 hrs)',category:'Entertainment',unit:'flat',price:900}
+    {id:'plan1',name:'Plan 1 dinner',category:'Food',unit:'per person',price:30,desc:'Chicken: Piccata, Marsala or Francese · Meat: Short Rib or Steak Tips · Vegetarian: Pasta Primavera or Penne alla Vodka · Dessert: Cookie Platter or Cake'},
+    {id:'plan2',name:'Plan 2 dinner',category:'Food',unit:'per person',price:45,desc:'Choice of 2 appetizers · Chicken: Roasted Airline Chicken Breast, Chicken Cordon Bleu or Chicken Kiev · Meat: Filet Medallions, Sirloin Steak or Pork Osso Bucco · Vegetarian/Fish: Butternut Squash Ravioli, Tuscan Buttered Gnocchi, Stuffed Sole or Stuffed Shrimp · Dessert: Cupcake Tower or Cheesecake'},
+    {id:'plan3',name:'Plan 3 dinner',category:'Food',unit:'per person',price:65,desc:'Choice of 3–4 appetizers · Includes linen package · Chicken: Saltimbocca, Scarpiello or Paprikash · Meat: Filet, Prime Rib, Duck Breast or Rack of Lamb · Vegetarian/Fish: Veggie Lasagna, Truffle Mushroom Ravioli, Diver Scallops or Chilean Sea Bass · Dessert: Cupcake Tower, Viennese Table or Crème Brûlée'},
+    {id:'bw',name:'Beer & Wine package',category:'Beverage',unit:'per person per hour',price:20,desc:'Discounted pricing available if offered for the entire event'},
+    {id:'bwm',name:'Beer, Wine & Mixed Drinks package',category:'Beverage',unit:'per person per hour',price:28,desc:'Discounted pricing available if offered for the entire event'},
+    {id:'fullbar',name:'Full Bar package',category:'Beverage',unit:'per person per hour',price:36,desc:'Customized cocktails available on request · Discounted pricing available if offered for the entire event'},
+    {id:'veg',name:'Vegetable Crudité Platter',category:'Food',unit:'per person',price:5,desc:''},
+    {id:'cheese',name:'Cheeseboard Package',category:'Food',unit:'per person',price:7,desc:'Locally sourced cheeses, assorted fruits & pickled vegetables with crostini'},
+    {id:'charc30',name:'Charcuterie Platter (25–30 people)',category:'Food',unit:'each',price:150,desc:'Locally sourced cheeses, assorted fruits & pickled vegetables with crostini'},
+    {id:'charc50',name:'Charcuterie Platter (50+ people)',category:'Food',unit:'each',price:400,desc:'Locally sourced cheeses, assorted fruits & pickled vegetables with crostini'},
+    {id:'linen',name:'Linen package',category:'Rental / AV',unit:'flat',price:40,desc:'Linens for tables (included with Plan 3)'}
   ],
-  taxRate:7, serviceRate:20, depositPct:50, balanceDueDays:7, taxService:true,
+  taxRate:7, serviceRate:22, depositPct:25, balanceDueDays:7, taxService:true,
   staff:['Laurie','Darby','Adam'],
   eventTypes:['Private party','Corporate','Wedding / rehearsal','Birthday','Fundraiser','Holiday party','Ticketed show','Other'],
   sources:['Website form','Phone','Email','Walk-in','Repeat client','Referral','Social media'],
   lostReasons:['Date unavailable','Budget','Chose another venue','No response','Event cancelled','Group size'],
-  terms:"1. Deposit. A deposit of the percentage shown is due at signing to confirm the date. Deposits are non-refundable.\n2. Final count. The final guest count is due 7 days before the event. You will be billed for the final count or actual attendance, whichever is higher.\n3. Food & beverage minimum. If food and beverage spending is below the minimum for your space, the difference is charged as a room minimum fee.\n4. Service charge and tax. A service charge applies to food and beverage. Sales tax applies as required by law.\n5. Balance. The remaining balance is due before the event date shown on this proposal.\n6. Cancellation. Cancellations made 30 or more days before the event may move the deposit to a new date within 6 months.\n7. Outside food and drink. No outside food or alcohol, except a celebration cake.\n8. Damages. The client is responsible for damage to the venue caused by guests or vendors they hire."
+  terms:"1. Deposit. A 25% deposit is due to book your event date.\n2. Final count. The final guest count is due 7 days before the event. You will be billed for the final count or actual attendance, whichever is higher.\n3. Room fee and minimums. A room fee may apply based on event date and size. If food and beverage spending is below the minimum for your space, the difference is charged as a room minimum fee.\n4. Service charge and tax. A service charge applies to food and beverage. Sales tax applies as required by law.\n5. Balance. The remaining balance is due before the event date shown on this proposal.\n6. Cancellation. With at least 14 days’ notice of cancellation, 50% of the deposit is refunded. With less than 14 days’ notice, the deposit is not refunded.\n7. Outside food and drink. No outside food or alcohol, except a celebration cake.\n8. Damages. The client is responsible for damage to the venue caused by guests or vendors they hire."
 };
 
 /* ---------- state ---------- */
@@ -138,7 +135,7 @@ function newEvent(partial){
 function toastOf(ev){return ev.toast||{invoiceNumber:'',invoiceUrl:''}}
 function toastInvoiceText(ev,t){
   const L=[`Customer: ${ev.client.name}${ev.client.company?' ('+ev.client.company+')':''}`,`Email: ${ev.client.email}  Phone: ${ev.client.phone}`,`Event: ${ev.title} · ${fmtDate(ev.date,true)} · ${fmtTime(ev.start)}–${fmtTime(ev.end)} · ${num(ev.guests)} guests`,'','Line items:'];
-  (ev.items||[]).forEach(i=>L.push(`  ${num(i.qty)} × ${i.name} @ ${money(i.price)} = ${money(num(i.qty)*num(i.price))}`));
+  (ev.items||[]).forEach(i=>L.push(`  ${num(i.qty)} × ${i.name} @ ${money(i.price)} ${i.unit} = ${money(num(i.qty)*num(i.price))}${i.desc?'\n      '+i.desc:''}`));
   if(t.shortfall)L.push(`  1 × F&B minimum shortfall @ ${money(t.shortfall)}`);
   if(t.roomFee)L.push(`  1 × Room fee (${(ev.spaceIds||[]).map(spaceName).join(', ')}) @ ${money(t.roomFee)}`);
   L.push(`  Service charge ${num(ev.serviceRate)}% = ${money(t.service)}`,'',`Total ${money(t.total)}`,`Deposit request: ${money(t.depositDue)} (${num(ev.depositPct)}%)`,`Due date for balance: ${fmtDate(balanceDueDate(ev))}`);
@@ -149,6 +146,8 @@ function autoAdvance(ev){
   const t=totals(ev);
   if(ev.contract&&ev.contract.signedAt&&t.depositMet&&['Lead','Proposal Sent','Tentative'].includes(ev.status)) setStatus(ev,'Definite');
 }
+function eventHours(ev){return Math.max(1,Math.round((span(ev)[1]-span(ev)[0])/30)/2)}
+function defaultQty(ev,unit){return unit==='per person'?num(ev.guests):unit==='per hour'?eventHours(ev):unit==='per person per hour'?num(ev.guests)*eventHours(ev):1}
 function applySpacePricing(ev){
   const sp=(ev.spaceIds||[]).map(spaceById).filter(Boolean);
   const b=sp.find(s=>s.buyout);
@@ -382,13 +381,13 @@ function totalsBlock(t,ev){
 function tabProposal(ev,t){
   const ro=S.readOnly?'disabled':'';
   const rows=(ev.items||[]).map((it,i)=>`<tr>
-    <td><input class="cell-in" type="text" id="it-${i}-name" data-bind="items.${i}.name" value="${esc(it.name)}" aria-label="Item name" ${ro}></td>
+    <td><input class="cell-in" type="text" id="it-${i}-name" data-bind="items.${i}.name" value="${esc(it.name)}" aria-label="Item name" ${ro}><input class="cell-in" type="text" id="it-${i}-desc" data-bind="items.${i}.desc" value="${esc(it.desc||'')}" placeholder="Choices / details (shown to client)" aria-label="Item details" style="margin-top:4px;font-size:12px;color:var(--muted)" ${ro}>${it.unit==='per person per hour'?`<div class="muted" style="font-size:11px;margin-top:2px">Qty = guests × hours</div>`:''}</td>
     <td><select class="cell-in" id="it-${i}-cat" data-bind="items.${i}.category" aria-label="Category" ${ro}>${CATS.map(c=>`<option ${c===it.category?'selected':''}>${c}</option>`).join('')}</select></td>
     <td><select class="cell-in" id="it-${i}-unit" data-bind="items.${i}.unit" aria-label="Unit" ${ro}>${UNITS.map(u=>`<option ${u===it.unit?'selected':''}>${u}</option>`).join('')}</select></td>
     <td class="num"><input class="cell-in" type="number" step="any" min="0" id="it-${i}-price" data-type="num" data-bind="items.${i}.price" value="${num(it.price)}" style="width:90px" aria-label="Price" ${ro}></td>
     <td class="num"><input class="cell-in" type="number" step="any" min="0" id="it-${i}-qty" data-type="num" data-bind="items.${i}.qty" value="${num(it.qty)}" style="width:72px" aria-label="Quantity" ${ro}></td>
     <td class="num">${money(num(it.price)*num(it.qty))}</td>
-    <td class="num" style="white-space:nowrap">${it.unit==='per person'&&num(it.qty)!==num(ev.guests)?`<button class="btn sm" data-act="sync-qty" data-i="${i}" title="Set quantity to guest count" ${ro}>= ${num(ev.guests)} guests</button> `:''}<button class="btn sm danger" data-act="del-item" data-i="${i}" aria-label="Remove line" ${ro}>Remove</button></td></tr>`).join('');
+    <td class="num" style="white-space:nowrap">${(it.unit==='per person'||it.unit==='per person per hour')&&num(it.qty)!==defaultQty(ev,it.unit)?`<button class="btn sm" data-act="sync-qty" data-i="${i}" title="Reset quantity from guest count${it.unit==='per person per hour'?' and event length':''}" ${ro}>= ${it.unit==='per person'?num(ev.guests)+' guests':num(ev.guests)+' × '+eventHours(ev)+' hrs'}</button> `:''}<button class="btn sm danger" data-act="del-item" data-i="${i}" aria-label="Remove line" ${ro}>Remove</button></td></tr>`).join('');
   return `<div class="panel"><div class="row between" style="margin-bottom:12px"><h3>Menu, packages &amp; rentals</h3>
     <div class="row"><select id="add-cat-item" data-ui="addItemSel" aria-label="Choose from menu" style="width:auto;max-width:340px" ${ro}>${catalogOptions()}</select><button class="btn primary" data-act="add-item" ${ro}>Add</button><button class="btn" data-act="add-custom" ${ro}>Custom line</button></div></div>
     <div class="tbl-wrap"><table><thead><tr><th>Item</th><th>Category</th><th>Unit</th><th class="num">Price</th><th class="num">Qty</th><th class="num">Line total</th><th></th></tr></thead><tbody>${rows||'<tr><td colspan="7" class="empty">No items yet. Pick from the menu above. Per-person items start at the guest count.</td></tr>'}</tbody></table></div>
@@ -405,7 +404,7 @@ function beoText(ev,t){
   const L=[];
   L.push(`BANQUET EVENT ORDER — ${S.config.venueName}`,`${ev.title} (${ev.status})`,`${fmtDate(ev.date,true)} · ${fmtTime(ev.start)}–${fmtTime(ev.end)}`,`Guests: ${num(ev.guests)} · Space: ${(ev.spaceIds||[]).map(spaceName).join(', ')}`,`Contact: ${ev.client.name} ${ev.client.phone} ${ev.client.email}`,`Event manager: ${ev.owner||'—'}`,'');
   L.push('TIMELINE');(ev.beo.timeline||[]).forEach(r=>L.push(`  ${fmtTime(r.time)}  ${r.desc}`));L.push('');
-  L.push('FOOD & BEVERAGE');(ev.items||[]).forEach(i=>L.push(`  ${num(i.qty)} × ${i.name} [${i.category}]`));L.push('');
+  L.push('FOOD & BEVERAGE');(ev.items||[]).forEach(i=>L.push(`  ${num(i.qty)} × ${i.name} [${i.category}]${i.desc?'\n      '+i.desc:''}`));L.push('');
   [['SETUP / FLOOR PLAN','setup'],['MUSIC / STAGE / AV','music'],['BAR','bar'],['KITCHEN','kitchen'],['ALLERGIES & DIETARY','allergies'],['STAFFING','staffing']].forEach(([h,k])=>{if(ev.beo[k]){L.push(h,'  '+ev.beo[k].replace(/\n/g,'\n  '),'')}});
   L.push(`Est. total ${money(t.total)} · Paid ${money(t.paid)} · Balance ${money(t.balance)}`);
   return L.join('\n');
@@ -421,7 +420,7 @@ function tabBEO(ev,t){
     <div class="sheet-head"><div>${docBrand('Banquet Event Order')}</div><div style="text-align:right"><b>${esc(ev.title)}</b><div><span class="pill ${sc(ev.status)}">${ev.status}</span></div></div></div>
     <div class="kv"><div><span>Date</span>${esc(fmtDate(ev.date,true))}</div><div><span>Time</span>${esc(fmtTime(ev.start))}–${esc(fmtTime(ev.end))}</div><div><span>Guests</span>${num(ev.guests)}</div><div><span>Space</span>${esc((ev.spaceIds||[]).map(spaceName).join(', ')||'—')}</div><div><span>Contact</span>${esc(ev.client.name||'—')}<br><span style="text-transform:none;letter-spacing:0;font-weight:400">${esc(ev.client.phone)}</span></div><div><span>Event manager</span>${esc(ev.owner||'—')}</div></div>
     <section><div class="row between"><h3 style="flex:1">Timeline</h3><button class="btn sm" data-act="add-tl" ${ro}>Add row</button></div><table><tbody>${tl||'<tr><td class="empty">No timeline yet. Use “Fill standard timeline” or add rows.</td></tr>'}</tbody></table></section>
-    <section><h3>Food &amp; beverage</h3>${fb.length?`<table><tbody>${fb.map(i=>`<tr><td class="num" style="width:60px">${num(i.qty)}</td><td>${esc(i.name)}</td><td class="muted">${esc(i.category)}</td></tr>`).join('')}</tbody></table>`:'<p class="muted">Add items on the Proposal tab.</p>'}</section>
+    <section><h3>Food &amp; beverage</h3>${fb.length?`<table><tbody>${fb.map(i=>`<tr><td class="num" style="width:60px">${num(i.qty)}</td><td>${esc(i.name)}${i.desc?`<div class="muted" style="font-size:12px">${esc(i.desc)}</div>`:''}</td><td class="muted">${esc(i.category)}</td></tr>`).join('')}</tbody></table>`:'<p class="muted">Add items on the Proposal tab.</p>'}</section>
     <div class="fields">
       ${txt(ev,'Setup / floor plan','beo.setup','Tables, linens, stage layout, coat check')}
       ${txt(ev,'Music / stage / AV','beo.music','Band or DJ, load-in time, sound check, mics, projector')}
@@ -482,7 +481,7 @@ function tabClient(ev,t){
   <div class="sheet">
     <div class="sheet-head"><div>${docBrand('Event proposal &amp; agreement')}</div><div style="text-align:right">Prepared for<br><b>${esc(ev.client.name||'Client')}</b>${ev.client.company?`<div class="muted">${esc(ev.client.company)}</div>`:''}</div></div>
     <div class="kv"><div><span>Event</span>${esc(ev.title)}</div><div><span>Date</span>${esc(fmtDate(ev.date,true))}</div><div><span>Time</span>${esc(fmtTime(ev.start))}–${esc(fmtTime(ev.end))}</div><div><span>Guests</span>${num(ev.guests)}</div><div><span>Space</span>${esc((ev.spaceIds||[]).map(spaceName).join(', ')||'—')}</div><div><span>Your contact</span>${esc(ev.owner||S.config.venueName)}</div></div>
-    <section><h3>What’s included</h3>${lines.length?`<table><thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Price</th><th class="num">Amount</th></tr></thead><tbody>${lines.map(i=>`<tr><td>${esc(i.name)}</td><td class="num">${num(i.qty)}</td><td class="num">${money(i.price)} <span class="muted" style="font-size:11px">${esc(i.unit)}</span></td><td class="num">${money(num(i.price)*num(i.qty))}</td></tr>`).join('')}</tbody></table>`:'<p class="muted">Menu to be confirmed.</p>'}
+    <section><h3>What’s included</h3>${lines.length?`<table><thead><tr><th>Item</th><th class="num">Qty</th><th class="num">Price</th><th class="num">Amount</th></tr></thead><tbody>${lines.map(i=>`<tr><td>${esc(i.name)}${i.desc?`<div class="muted" style="font-size:12px">${esc(i.desc)}</div>`:''}</td><td class="num">${num(i.qty)}</td><td class="num">${money(i.price)} <span class="muted" style="font-size:11px">${esc(i.unit)}</span></td><td class="num">${money(num(i.price)*num(i.qty))}</td></tr>`).join('')}</tbody></table>`:'<p class="muted">Menu to be confirmed.</p>'}
       <div style="margin-top:14px">${totalsBlock(t,ev)}</div></section>
     <section><h3>Terms</h3><div class="terms">${esc(S.config.terms)}</div></section>
     <section><h3>Signature</h3>${c.signedAt?`<div class="sign-box"><div class="signed">${esc(c.signedName)}</div><div class="muted">Signed electronically ${esc(fmtTS(c.signedAt))}</div></div>`:
@@ -564,8 +563,8 @@ function renderSettings(){
     ${d.spaces.map((s,i)=>`<tr><td>${sIn(`spaces.${i}.name`)}</td><td class="num">${sIn(`spaces.${i}.seated`,'number','80px')}</td><td class="num">${sIn(`spaces.${i}.standing`,'number','80px')}</td><td class="num">${sIn(`spaces.${i}.roomFee`,'number','100px')}</td><td class="num">${sIn(`spaces.${i}.fbMin`,'number','100px')}</td><td><label class="check" for="s-spaces-${i}-buyout"><input type="checkbox" id="s-spaces-${i}-buyout" data-sbind="spaces.${i}.buyout" data-type="bool" ${s.buyout?'checked':''} ${ro}> Buyout</label></td><td class="num"><button class="btn sm danger" data-act="s-del-space" data-i="${i}" ${ro}>Remove</button></td></tr>`).join('')}
     </tbody></table></div></div>
   <div class="panel" style="margin-bottom:16px"><div class="row between" style="margin-bottom:10px"><h3>Menu, packages &amp; rentals</h3><button class="btn sm" data-act="s-add-item" ${ro}>Add item</button></div>
-    <div class="tbl-wrap"><table><thead><tr><th>Name</th><th>Category</th><th>Unit</th><th class="num">Price</th><th></th></tr></thead><tbody>
-    ${d.catalog.map((c,i)=>`<tr><td>${sIn(`catalog.${i}.name`)}</td><td><select class="cell-in" id="s-catalog-${i}-category" data-sbind="catalog.${i}.category" aria-label="Category" ${ro}>${CATS.map(x=>`<option ${x===c.category?'selected':''}>${x}</option>`).join('')}</select></td><td><select class="cell-in" id="s-catalog-${i}-unit" data-sbind="catalog.${i}.unit" aria-label="Unit" ${ro}>${UNITS.map(x=>`<option ${x===c.unit?'selected':''}>${x}</option>`).join('')}</select></td><td class="num">${sIn(`catalog.${i}.price`,'number','100px')}</td><td class="num"><button class="btn sm danger" data-act="s-del-item" data-i="${i}" ${ro}>Remove</button></td></tr>`).join('')}
+    <div class="tbl-wrap"><table><thead><tr><th>Name &amp; details</th><th>Category</th><th>Unit</th><th class="num">Price</th><th></th></tr></thead><tbody>
+    ${d.catalog.map((c,i)=>`<tr><td>${sIn(`catalog.${i}.name`)}<input class="cell-in" id="s-catalog-${i}-desc" type="text" data-sbind="catalog.${i}.desc" value="${esc(c.desc||'')}" placeholder="Choices / details shown to clients" aria-label="Details" style="margin-top:4px;font-size:12px" ${ro}></td><td><select class="cell-in" id="s-catalog-${i}-category" data-sbind="catalog.${i}.category" aria-label="Category" ${ro}>${CATS.map(x=>`<option ${x===c.category?'selected':''}>${x}</option>`).join('')}</select></td><td><select class="cell-in" id="s-catalog-${i}-unit" data-sbind="catalog.${i}.unit" aria-label="Unit" ${ro}>${UNITS.map(x=>`<option ${x===c.unit?'selected':''}>${x}</option>`).join('')}</select></td><td class="num">${sIn(`catalog.${i}.price`,'number','100px')}</td><td class="num"><button class="btn sm danger" data-act="s-del-item" data-i="${i}" ${ro}>Remove</button></td></tr>`).join('')}
     </tbody></table></div></div>
   <div class="panel" style="margin-bottom:16px"><h3>Lists (one per line)</h3><div class="fields">
     ${[['staff','Event managers'],['eventTypes','Event types'],['sources','Lead sources'],['lostReasons','Lost reasons']].map(([k,l])=>`<div class="f"><label for="s-list-${k}">${l}</label><textarea id="s-list-${k}" data-slist="${k}" style="min-height:130px" ${ro}>${esc(d[k].join('\n'))}</textarea></div>`).join('')}
@@ -592,10 +591,10 @@ document.addEventListener('click',e=>{
     case 'cal-today':S.calMonth=new Date(new Date().getFullYear(),new Date().getMonth(),1);render();break;
     case 'cal-new':{if(S.readOnly)return;const sp=S.calSpace!=='all'?[S.calSpace]:[];const n=newEvent({date:el.dataset.date,spaceIds:sp});if(sp.length)applySpacePricing(n);logAct(n,'Event created from calendar');persistEvent(n);S.tab='details';go('event',n.id);break;}
     case 'delete-event':if(!S.delArm){S.delArm=true;render();}else{removeEvent(S.eventId);toast('Event deleted');go('pipeline');}break;
-    case 'add-item':{const id=document.getElementById('add-cat-item').value||S.addItemSel;const c=S.config.catalog.find(x=>x.id===id);if(!c)return;mutate(ev.id,x=>{x.items.push({id:uid(),name:c.name,category:c.category,unit:c.unit,price:num(c.price),qty:c.unit==='per person'?num(x.guests):c.unit==='per hour'?Math.max(1,Math.round((span(x)[1]-span(x)[0])/60)):1})},'Added '+c.name);break;}
+    case 'add-item':{const id=document.getElementById('add-cat-item').value||S.addItemSel;const c=S.config.catalog.find(x=>x.id===id);if(!c)return;mutate(ev.id,x=>{x.items.push({id:uid(),name:c.name,category:c.category,unit:c.unit,price:num(c.price),desc:c.desc||'',qty:defaultQty(x,c.unit)})},'Added '+c.name);break;}
     case 'add-custom':mutate(ev.id,x=>x.items.push({id:uid(),name:'Custom item',category:'Other',unit:'flat',price:0,qty:1}));setTimeout(()=>{const f=document.getElementById('it-'+(ev.items.length)+'-name');if(f){f.focus();f.select()}},30);break;
     case 'del-item':{const i=+el.dataset.i;const nm=ev.items[i]&&ev.items[i].name;mutate(ev.id,x=>x.items.splice(i,1),'Removed '+nm);break;}
-    case 'sync-qty':{const i=+el.dataset.i;mutate(ev.id,x=>{x.items[i].qty=num(x.guests)});break;}
+    case 'sync-qty':{const i=+el.dataset.i;mutate(ev.id,x=>{x.items[i].qty=defaultQty(x,x.items[i].unit)});break;}
     case 'space-pricing':mutate(ev.id,x=>applySpacePricing(x),'Applied space pricing');break;
     case 'add-tl':mutate(ev.id,x=>{x.beo.timeline=x.beo.timeline||[];x.beo.timeline.push({time:'',desc:''})});break;
     case 'del-tl':{const i=+el.dataset.i;mutate(ev.id,x=>x.beo.timeline.splice(i,1));break;}
@@ -611,7 +610,7 @@ document.addEventListener('click',e=>{
     case 's-del-logo':S.draft.logo='';render();break;
     case 's-add-space':S.draft.spaces.push({id:uid(),name:'New space',seated:0,standing:0,roomFee:0,fbMin:0,buyout:false});render();break;
     case 's-del-space':S.draft.spaces.splice(+el.dataset.i,1);render();break;
-    case 's-add-item':S.draft.catalog.push({id:uid(),name:'New item',category:'Food',unit:'per person',price:0});render();break;
+    case 's-add-item':S.draft.catalog.push({id:uid(),name:'New item',category:'Food',unit:'per person',price:0,desc:''});render();break;
     case 's-del-item':S.draft.catalog.splice(+el.dataset.i,1);render();break;
   }
 });

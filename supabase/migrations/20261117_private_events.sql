@@ -161,7 +161,7 @@ as $$
       'client', jsonb_build_object('name', e.data#>'{client,name}', 'company', e.data#>'{client,company}'),
       'spaceNames', coalesce((select jsonb_agg(sp->>'name') from jsonb_array_elements(coalesce(s.data->'spaces', '[]'::jsonb)) sp
                               where (e.data->'spaceIds') ? (sp->>'id')), '[]'::jsonb),
-      'items', coalesce((select jsonb_agg(jsonb_build_object('name', i->'name', 'category', i->'category', 'unit', i->'unit', 'price', i->'price', 'qty', i->'qty'))
+      'items', coalesce((select jsonb_agg(jsonb_build_object('name', i->'name', 'desc', i->'desc', 'category', i->'category', 'unit', i->'unit', 'price', i->'price', 'qty', i->'qty'))
                          from jsonb_array_elements(coalesce(e.data->'items', '[]'::jsonb)) i), '[]'::jsonb),
       'roomFee', e.data->'roomFee', 'fbMinimum', e.data->'fbMinimum', 'serviceRate', e.data->'serviceRate',
       'taxRate', e.data->'taxRate', 'depositPct', e.data->'depositPct', 'taxService', e.data->'taxService',
