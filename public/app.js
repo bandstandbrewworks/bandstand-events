@@ -164,14 +164,15 @@ function go(view,id){
   S.view=view; S.eventId=id||null; S.delArm=false; S.beoText=null; S.toastText=null;
   if(view==='settings') S.draft=clone(S.config);
   if(view==='inquiry') S.inquiryDone=null;
-  const h=view==='event'?'event-'+id:view;
+  const h=view==='event'?'event-'+id:view==='customer'?'customer-'+encodeURIComponent(id):view;
   try{ if(location.hash.slice(1)!==h) location.hash=h; }catch(e){}
   render(); document.getElementById('main').scrollTop=0;
 }
 function fromHash(){
   let h='';try{h=location.hash.slice(1)}catch(e){}
   if(h.startsWith('event-')){S.view='event';S.eventId=h.slice(6);}
-  else if(['pipeline','calendar','events','reports','inquiry','settings'].includes(h)){S.view=h;if(h==='settings')S.draft=clone(S.config);}
+  else if(h.startsWith('customer-')){S.view='customer';try{S.eventId=decodeURIComponent(h.slice(9))}catch(e){S.eventId=h.slice(9)}}
+  else if(['pipeline','calendar','events','customers','reports','inquiry','settings'].includes(h)){S.view=h;if(h==='settings')S.draft=clone(S.config);}
 }
 window.addEventListener('hashchange',()=>{fromHash();render()});
 
@@ -192,8 +193,8 @@ function render(){
 function renderSide(){
   const evs=evList();
   const open=evs.filter(e=>e.status==='Lead'||e.status==='Proposal Sent').length;
-  const nav=[['pipeline','Pipeline',open],['calendar','Calendar',''],['events','All events',evs.length||''],['reports','Reports',''],['inquiry','Website form',''],['settings','Settings','']];
-  const on=S.view==='event'?'':S.view;
+  const nav=[['pipeline','Pipeline',open],['calendar','Calendar',''],['events','All events',evs.length||''],['customers','Customers',customers().length||''],['reports','Reports',''],['inquiry','Website form',''],['settings','Settings','']];
+  const on=S.view==='event'?'':S.view==='customer'?'customers':S.view;
   let status;
   status=S.stale?'<span class="dotline"><i class="off"></i>Can’t reach the database</span>':'<span class="dotline"><i></i>Live · saved to Supabase</span>';
   if(S.email) status+=`<span>${esc(S.email)}</span><button class="link" data-act="sign-out" style="text-align:left;color:var(--gold)">Sign out</button>`;
@@ -209,6 +210,8 @@ function renderMain(){
   switch(S.view){
     case 'calendar':return renderCalendar();
     case 'events':return renderEvents();
+    case 'customers':return renderCustomers();
+    case 'customer':return renderCustomer();
     case 'reports':return renderReports();
     case 'inquiry':return renderInquiry();
     case 'settings':return renderSettings();
@@ -285,6 +288,64 @@ function renderCalendar(){
 }
 
 /* ---------- all events ---------- */
+/* ---------- customers (built from events) ---------- */
+function custKey(c){
+  c=c||{};const em=String(c.email||'').trim().toLowerCase();
+  if(em)return em;
+  const ph=String(c.phone||'').replace(/\D/g,'');
+  if(ph.length>=7)return 'tel:'+ph.slice(-10);
+  const nm=String(c.name||'').trim().toLowerCase().replace(/\s+/g,' ');
+  return nm?'name:'+nm:'';
+}
+const BOOKED=['Definite','Completed'];
+function customers(){
+  const map=new Map();
+  for(const e of S.events.values()){
+    const k=custKey(e.client);if(!k)continue;
+    let c=map.get(k);
+    if(!c){c={key:k,name:'',company:'',email:'',phone:'',events:[],booked:0,spend:0,last:'',next:'',updated:''};map.set(k,c);}
+    c.events.push(e);
+    // newest non-empty contact details win
+    const u=e.updatedAt||e.createdAt||'';
+    ['name','company','email','phone'].forEach(f=>{const v=e.client&&e.client[f];if(v&&(!c[f]||u>=c['_'+f])){c[f]=v;c['_'+f]=u}});
+    if(BOOKED.includes(e.status)){c.booked++;c.spend+=totals(e).total;}
+    const t=todayISO();
+    if(e.date&&e.date<t&&e.status!=='Lost'&&e.date>c.last)c.last=e.date;
+    if(e.date&&e.date>=t&&e.status!=='Lost'&&(!c.next||e.date<c.next))c.next=e.date;
+  }
+  return [...map.values()];
+}
+function customerOf(ev){const k=custKey(ev.client);return k?customers().find(c=>c.key===k):null}
+function renderCustomers(){
+  const q=(S.custQ||'').trim().toLowerCase();
+  let list=customers();
+  const all=list.length,repeat=list.filter(c=>c.booked>1).length,spend=list.reduce((a,c)=>a+c.spend,0);
+  if(q)list=list.filter(c=>[c.name,c.company,c.email,c.phone].join(' ').toLowerCase().includes(q));
+  const sort=S.custSort||'recent';
+  list.sort(sort==='spend'?(a,b)=>b.spend-a.spend:sort==='name'?(a,b)=>(a.name||'').localeCompare(b.name||''):(a,b)=>((b.next||b.last||'')).localeCompare(a.next||a.last||''));
+  return `${staleBanner()}<div class="page-head"><div><h1>Customers</h1><p>Built from your events and matched by email, so each client shows up once with their full history.</p></div>
+   <div class="row"><input type="text" id="cust-q" data-ui="custQ" placeholder="Search name, company, email, phone" value="${esc(S.custQ||'')}" style="width:260px">
+   <select id="cust-sort" data-ui="custSort" style="width:auto" aria-label="Sort"><option value="recent" ${sort==='recent'?'selected':''}>Most recent</option><option value="spend" ${sort==='spend'?'selected':''}>Highest spend</option><option value="name" ${sort==='name'?'selected':''}>Name A–Z</option></select></div></div>
+  <div class="tiles"><div class="tile"><div class="k">Customers</div><div class="v">${all}</div></div><div class="tile"><div class="k">Repeat clients</div><div class="v">${repeat}</div><div class="s">Booked 2+ events</div></div><div class="tile"><div class="k">Lifetime booked</div><div class="v">${money0(spend)}</div></div></div>
+  <div class="panel" style="padding:0"><div class="tbl-wrap"><table><thead><tr><th>Customer</th><th>Contact</th><th class="num">Events</th><th class="num">Booked</th><th class="num">Spend</th><th>Last event</th><th>Next event</th></tr></thead><tbody>
+  ${list.length?list.map(c=>`<tr class="click" data-act="open-customer" data-key="${esc(c.key)}"><td><b>${esc(c.name||'(no name)')}</b>${c.company?`<div class="muted" style="font-size:12px">${esc(c.company)}</div>`:''}${c.booked>1?' <span class="flag ok">Repeat</span>':''}</td><td style="font-size:13px">${esc(c.email)}${c.phone?`<div class="muted">${esc(c.phone)}</div>`:''}</td><td class="num">${c.events.length}</td><td class="num">${c.booked}</td><td class="num">${c.spend?money0(c.spend):'—'}</td><td>${c.last?esc(fmtDate(c.last)):'—'}</td><td>${c.next?esc(fmtDate(c.next)):'—'}</td></tr>`).join(''):`<tr><td colspan="7" class="empty">${all?'No customers match.':'No customers yet. They appear here as soon as an event has a client name, email or phone.'}</td></tr>`}
+  </tbody></table></div></div>`;
+}
+function renderCustomer(){
+  const c=customers().find(x=>x.key===S.eventId);
+  if(!c)return `<div class="page-head"><div><h1>Customer not found</h1><p>Their events may have been deleted or their email changed.</p></div></div><button class="btn" data-act="nav" data-view="customers">Back to customers</button>`;
+  const evs=c.events.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||''));
+  const avg=c.booked?c.spend/c.booked:0;
+  return `${staleBanner()}<button class="link" data-act="nav" data-view="customers" style="margin-bottom:10px">‹ Customers</button>
+  <div class="det-head"><div><div class="row"><h1>${esc(c.name||'(no name)')}</h1>${c.booked>1?'<span class="flag ok">Repeat client</span>':''}</div>
+    <div class="meta">${[c.company,c.email,c.phone].filter(Boolean).map(esc).join(' · ')||'No contact details'}</div></div>
+    <div class="row"><button class="btn primary" data-act="new-for-customer" data-key="${esc(c.key)}" ${S.readOnly?'disabled':''}>+ New event for this client</button></div></div>
+  <div class="tiles"><div class="tile"><div class="k">Events</div><div class="v">${c.events.length}</div><div class="s">${c.booked} booked</div></div><div class="tile"><div class="k">Lifetime spend</div><div class="v">${money0(c.spend)}</div><div class="s">Definite + completed</div></div><div class="tile"><div class="k">Avg event</div><div class="v">${avg?money0(avg):'—'}</div></div><div class="tile"><div class="k">Last / next</div><div class="v" style="font-size:20px">${c.last?esc(fmtDate(c.last)):'—'}</div><div class="s">Next: ${c.next?esc(fmtDate(c.next)):'none'}</div></div></div>
+  <div class="panel" style="padding:0"><div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Event</th><th>Space</th><th class="num">Guests</th><th>Status</th><th class="num">Total</th><th class="num">Balance</th></tr></thead><tbody>
+  ${evs.map(e=>{const t=totals(e);return `<tr class="click" data-act="open-event" data-id="${esc(e.id)}"><td>${esc(fmtDate(e.date))}</td><td><b>${esc(e.title)}</b><div class="muted" style="font-size:12px">${esc(e.type||'')}${e.source==='Imported'?' · imported':''}</div></td><td>${esc((e.spaceIds||[]).map(spaceName).join(', '))}</td><td class="num">${num(e.guests)}</td><td><span class="pill ${sc(e.status)}">${esc(e.status)}</span></td><td class="num">${t.total?money0(t.total):'—'}</td><td class="num">${t.total?money0(t.balance):'—'}</td></tr>`}).join('')}
+  </tbody></table></div></div>
+  <p class="muted" style="font-size:12px;margin-top:10px">To update this client’s phone, email or company, edit it on their newest event. The newest details are shown here.</p>`;
+}
 function renderEvents(){
   const q=S.listQ.trim().toLowerCase();
   let list=evList().filter(e=>{
@@ -348,7 +409,7 @@ function renderDetail(){
 function tabDetails(ev,cap){
   const c=S.config;
   return `<div class="grid2">
-  <div class="panel"><h3>Contact</h3><div class="fields">
+  <div class="panel"><div class="row between" style="margin-bottom:12px"><h3>Contact</h3>${(()=>{const cu=customerOf(ev);const others=cu?cu.events.length-1:0;return cu?`<button class="link" data-act="open-customer" data-key="${esc(cu.key)}">${others?`Repeat client · ${others} other event${others>1?'s':''}`:'Customer profile'} ›</button>`:''})()}</div><div class="fields">
     ${inp(ev,'Name','client.name')}${inp(ev,'Company / organization','client.company')}${inp(ev,'Email','client.email','email')}${inp(ev,'Phone','client.phone','tel')}
   </div></div>
   <div class="panel"><h3>Booking</h3><div class="fields">
@@ -592,6 +653,8 @@ document.addEventListener('click',e=>{
     case 'back':history.length>1?history.back():go('pipeline');break;
     case 'new-event':{if(S.readOnly)return toast('You have view-only access.');const n=newEvent();logAct(n,'Event created');persistEvent(n);S.tab='details';go('event',n.id);setTimeout(()=>{const f=document.getElementById('f-title');if(f){f.focus();f.select()}},30);break;}
     case 'open-event':S.tab='details';go('event',el.dataset.id);break;
+    case 'open-customer':go('customer',el.dataset.key);break;
+    case 'new-for-customer':{if(S.readOnly)return;const cu=customers().find(x=>x.key===el.dataset.key);if(!cu)return;const n=newEvent({client:{name:cu.name,email:cu.email,phone:cu.phone,company:cu.company},source:'Repeat client',title:(cu.company||cu.name||'New')+' event'});logAct(n,'Event created for repeat client');persistEvent(n);S.tab='details';go('event',n.id);break;}
     case 'tab':S.tab=el.dataset.tab;S.delArm=false;S.beoText=null;S.toastText=null;render();break;
     case 'copy-toast':{const text=toastInvoiceText(ev,totals(ev));S.toastText=text;copyText(text,()=>render(),'Invoice details copied');render();break;}
     case 'cal-move':S.calMonth=new Date(S.calMonth.getFullYear(),S.calMonth.getMonth()+Number(el.dataset.n),1);render();break;
@@ -641,7 +704,8 @@ function readLogo(file){
 }
 /* ---------- events: inputs ---------- */
 document.addEventListener('input',e=>{if(e.target.classList&&e.target.classList.contains('desc-box'))e.target.rows=descRows(e.target.value);if(e.target.matches('[data-bind],[data-sbind],[data-slist]'))e.target.dataset.dirty='1';
-  if(e.target.dataset.ui==='listQ'){S.listQ=e.target.value;scheduleRender();}});
+  if(e.target.dataset.ui==='listQ'){S.listQ=e.target.value;scheduleRender();}
+  if(e.target.dataset.ui==='custQ'){S.custQ=e.target.value;scheduleRender();}});
 document.addEventListener('change',e=>{
   const t=e.target;
   if(t.hasAttribute('data-logo')&&t.files&&t.files[0]&&S.draft){readLogo(t.files[0]);return;}
