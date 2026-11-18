@@ -31,6 +31,7 @@ const DEFAULT_CONFIG={
     {id:'linen',name:'Linen package',category:'Rental / AV',unit:'flat',price:40,desc:'Linens for tables (included with Plan 3)'}
   ],
   taxRate:7, serviceRate:22, depositPct:25, balanceDueDays:7, taxService:true,
+  defaultStart:'18:00', defaultEnd:'22:00', defaultGuests:50,
   staff:['Laurie','Darby','Adam'],
   eventTypes:['Private party','Corporate','Wedding / rehearsal','Birthday','Fundraiser','Holiday party','Ticketed show','Other'],
   sources:['Website form','Phone','Email','Walk-in','Repeat client','Referral','Social media'],
@@ -124,7 +125,7 @@ function newEvent(partial){
   const c=S.config, n=new Date().toISOString();
   const ev=Object.assign({
     id:uid(),status:'Lead',source:c.sources[1]||'Phone',createdAt:n,updatedAt:n,title:'New inquiry',type:c.eventTypes[0]||'',
-    date:'',start:'18:00',end:'22:00',spaceIds:[],guests:50,owner:c.staff[0]||'',followUp:addDays(todayISO(),2),lostReason:'',notes:'',
+    date:'',start:c.defaultStart||'18:00',end:c.defaultEnd||'22:00',spaceIds:[],guests:num(c.defaultGuests)||50,owner:c.staff[0]||'',followUp:addDays(todayISO(),2),lostReason:'',notes:'',
     client:{name:'',email:'',phone:'',company:''},items:[],roomFee:0,fbMinimum:0,
     serviceRate:c.serviceRate,taxRate:c.taxRate,depositPct:c.depositPct,taxService:!!c.taxService,
     beo:{timeline:[],setup:'',music:'',bar:'',kitchen:'',staffing:'',allergies:''},
@@ -558,6 +559,10 @@ function renderSettings(){
     <div class="f"><label for="s-serviceRate">Service charge (%)</label>${sIn('serviceRate','number')}</div>
     <div class="f"><label for="s-depositPct">Deposit (%)</label>${sIn('depositPct','number')}</div>
     <div class="f"><label for="s-balanceDueDays">Balance due (days before)</label>${sIn('balanceDueDays','number')}</div>
+    <div class="f"><label for="s-defaultStart">Default start time</label>${sIn('defaultStart','time')}</div>
+    <div class="f"><label for="s-defaultEnd">Default end time</label>${sIn('defaultEnd','time')}</div>
+    <div class="f"><label for="s-defaultGuests">Default guest count</label>${sIn('defaultGuests','number')}</div>
+    <div class="f wide"><span class="muted" style="font-size:12px">The three defaults above fill in new events and the website inquiry form. Guests can still change them on the form.</span></div>
     <div class="f"><span class="lbl">Service charge</span><label class="check" for="s-taxService"><input type="checkbox" id="s-taxService" data-sbind="taxService" data-type="bool" ${d.taxService?'checked':''} ${ro}> Is taxable</label></div>
   </div></div>
   <div class="panel" style="margin-bottom:16px"><div class="row between" style="margin-bottom:10px"><h3>Spaces</h3><button class="btn sm" data-act="s-add-space" ${ro}>Add space</button></div>
