@@ -215,4 +215,4 @@ body.public-page{background:var(--bg);display:block;height:auto;min-height:100%}
 
 .desc-box{margin-top:4px;font-size:12px;line-height:1.45;color:var(--muted);min-height:0;resize:vertical;field-sizing:content;white-space:pre-wrap}
 .pick-preview{background:var(--surface-2);border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:13px}
-.pick-preview div{color:var(--muted);margin-top:2px}
+.pick-preview div{color:var(--muted);margin-top:2px;white-space:pre-line}
