@@ -301,9 +301,9 @@ function renderImport(){
     const tot=evs.reduce((a,e)=>a+totals(e).total,0);
     const upcoming=evs.filter(e=>e.date>=todayISO()&&e.status!=='Lost').length;
     const clients=new Set(evs.map(e=>custKey(e.client)).filter(Boolean)).size;
-    body+=`<div class="tiles"><div class="tile"><div class="k">Events to import</div><div class="v">${evs.length}</div><div class="s">${existing?existing+' already here (will be updated)':'all new'}</div></div><div class="tile"><div class="k">Upcoming</div><div class="v">${upcoming}</div><div class="s">Will appear in Pipeline &amp; Calendar</div></div><div class="tile"><div class="k">Customers</div><div class="v">${clients}</div><div class="s">${evs.filter(e=>e.client.email).length} events with an email</div></div><div class="tile"><div class="k">Event totals</div><div class="v">${money0(tot)}</div><div class="s">Tripleseat grand totals</div></div></div>
+    body+=`<div class="tiles"><div class="tile"><div class="k">${r.kind==='leads'?'Leads to import':'Events to import'}</div><div class="v">${evs.length}</div><div class="s">${existing?existing+' already here (will be updated)':'all new'}${r.kind==='leads'?` · ${r.matched} already here as events`:''}</div></div><div class="tile"><div class="k">Upcoming</div><div class="v">${upcoming}</div><div class="s">Will appear in Pipeline &amp; Calendar</div></div><div class="tile"><div class="k">Customers</div><div class="v">${clients}</div><div class="s">${evs.filter(e=>e.client.email).length} events with an email</div></div>${r.kind==='leads'?`<div class="tile"><div class="k">Lost inquiries</div><div class="v">${evs.filter(e=>e.status==='Lost').length}</div><div class="s">Go to Reports › Why we lost them</div></div>`:`<div class="tile"><div class="k">Event totals</div><div class="v">${money0(tot)}</div><div class="s">Tripleseat grand totals</div></div>`}</div>
     <div class="panel" style="margin-bottom:16px"><div class="row between"><div class="legend">${Object.entries(byStatus).map(([k,v])=>`<span class="pill ${sc(k)}">${esc(k)} · ${v}</span>`).join('')}</div>
-      <div class="row">${im.done?`<span class="flag ok">Imported ${im.done} events</span><button class="btn" data-act="nav" data-view="customers">View customers</button>`:`<button class="btn" data-act="imp-clear">Cancel</button><button class="btn primary" data-act="imp-run" ${S.readOnly||im.running?'disabled':''}>${im.running?`Importing ${im.progress||0} of ${evs.length}…`:`Import ${evs.length} events`}</button>`}</div></div>
+      <div class="row">${im.done?`<span class="flag ok">Imported ${im.done} ${r.kind==='leads'?'leads':'events'}</span><button class="btn" data-act="nav" data-view="customers">View customers</button>`:`<button class="btn" data-act="imp-clear">Cancel</button><button class="btn primary" data-act="imp-run" ${S.readOnly||im.running?'disabled':''}>${im.running?`Importing ${im.progress||0} of ${evs.length}…`:`Import ${evs.length} ${r.kind==='leads'?'leads':'events'}`}</button>`}</div></div>
       ${r.skipped.length?`<p class="muted" style="font-size:13px;margin:12px 0 0">Skipping ${r.skipped.length}: ${r.skipped.map(x=>esc(x.name)+' ('+esc(x.why)+')').join('; ')}</p>`:''}
       ${r.unmatchedRooms.length?`<p class="flag warn" style="display:inline-block;margin-top:10px">Rooms with no matching space: ${r.unmatchedRooms.map(esc).join(', ')}. Those events keep the room name in their notes.</p>`:''}
       ${(r.add.eventTypes.length||r.add.staff.length||r.add.sources.length)?`<p class="muted" style="font-size:13px;margin:10px 0 0">Will also add to Settings lists: ${[r.add.eventTypes.length?'event types ('+r.add.eventTypes.map(esc).join(', ')+')':'',r.add.staff.length?'event managers ('+r.add.staff.map(esc).join(', ')+')':'',r.add.sources.length?'lead sources ('+r.add.sources.map(esc).join(', ')+')':''].filter(Boolean).join('; ')}.</p>`:''}
@@ -312,7 +312,7 @@ function renderImport(){
     ${evs.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'')).map(e=>{const t=totals(e);return `<tr><td>${esc(fmtDate(e.date))}</td><td>${esc(e.title)}<div class="muted" style="font-size:12px">${esc(e.type)}</div></td><td>${esc(e.client.name)}</td><td>${esc(e.spaceIds.map(spaceName).join(', ')||'—')}</td><td class="num">${e.guests||'—'}</td><td><span class="pill ${sc(e.status)}">${e.status}</span></td><td class="num">${t.total?money(t.total):'—'}</td><td class="num">${t.paid?money(t.paid):'—'}</td></tr>`}).join('')}
     </tbody></table></div></div>`;
   }
-  return `<div class="page-head"><div><h1>Import past events</h1><p>Upload a Tripleseat <b>Event Details</b> report exported as CSV (Reports › Event Details › Export). You’ll see a preview before anything is saved. Importing the same file again updates those events instead of duplicating them.</p></div></div>
+  return `<div class="page-head"><div><h1>Import past events</h1><p>Upload a Tripleseat <b>Event Details</b> or <b>Lead Details</b> report exported as CSV. Leads that already became events are skipped. You’ll see a preview before anything is saved. Importing the same file again updates those events instead of duplicating them.</p></div></div>
   ${im.result?'':`<div class="panel" style="margin-bottom:16px"><label class="btn primary" for="imp-file" style="color:var(--accent-ink);display:inline-block">Choose CSV file…</label><input type="file" id="imp-file" data-import accept=".csv,text/csv" style="display:none" ${S.readOnly?'disabled':''}> <span class="muted" style="margin-left:8px">${im.fileName?esc(im.fileName):'No file chosen'}</span></div>`}
   ${body}`;
 }
@@ -321,9 +321,10 @@ function readImportFile(file){
   if(!window.Papa){S.imp.error='The CSV reader didn’t load. Check your connection and reload the page.';render();return;}
   window.Papa.parse(file,{header:true,skipEmptyLines:'greedy',complete:res=>{
     const headers=res.meta.fields||[];
-    if(!tsIsTripleseat(headers)){S.imp.error='This doesn’t look like a Tripleseat Event Details export. It needs the columns Name, Status, Date and Event Id.';render();return;}
-    S.imp.result=tripleseatToEvents(res.data,S.config);
-    if(!S.imp.result.events.length)S.imp.error='No events found to import in this file.';
+    if(tsIsTripleseat(headers))S.imp.result=tripleseatToEvents(res.data,S.config);
+    else if(tsIsLeads(headers))S.imp.result=tripleseatLeadsToEvents(res.data,S.config,evList());
+    else{S.imp.error='This doesn’t look like a Tripleseat Event Details or Lead Details export.';render();return;}
+    if(!S.imp.result.events.length)S.imp.error=S.imp.result.kind==='leads'?`Nothing new to import: ${S.imp.result.matched} leads are already here as events${S.imp.result.skipped.length?', and '+S.imp.result.skipped.length+' were skipped':''}.`:'No events found to import in this file.';
     render();
   },error:err=>{S.imp.error='Couldn’t read that file: '+(err&&err.message||'unknown error');render();}});
 }
@@ -332,11 +333,12 @@ async function runImport(){
   im.running=true;im.progress=0;render();
   const r=im.result;
   // extend settings lists first
-  if(r.add.eventTypes.length||r.add.staff.length||r.add.sources.length){
+  if(r.add.eventTypes.length||r.add.staff.length||r.add.sources.length||(r.add.lostReasons||[]).length){
     const c=clone(S.config);
     c.eventTypes=[...c.eventTypes,...r.add.eventTypes.filter(x=>!c.eventTypes.includes(x))];
     c.staff=[...c.staff,...r.add.staff.filter(x=>!c.staff.includes(x))];
     c.sources=[...c.sources,...r.add.sources.filter(x=>!c.sources.includes(x))];
+    if(r.add.lostReasons)c.lostReasons=[...c.lostReasons,...r.add.lostReasons.filter(x=>!c.lostReasons.includes(x))];
     persistConfig(c);
   }
   const rows=r.events.map(e=>{const prev=S.events.get(e.id);const ev=clone(e);

@@ -123,9 +123,95 @@ function tripleseatToEvents(rows, cfg) {
       contract: { sentAt: '', signedAt: definite && ['Definite', 'Completed'].includes(status) ? definite + 'T12:00:00Z' : '', signedName: definite && ['Definite', 'Completed'].includes(status) ? contact + ' (Tripleseat)' : '' },
       toast: { invoiceNumber: '', invoiceUrl: '' },
       payments, activity,
-      imported: { from: 'Tripleseat', eventId: tsId, actual: actual || 0, grandTotal: grand, deposit: deposit || 0, amountDue: due, importedAt: nowIso, breakdown: Object.keys(bk).length ? bk : null, depositDueDate: tsDate(r['Deposit Due Date'] || r['Deposit Due Date_1']), balanceDueDate: tsDate(r['Balance Due Date'] || r['Balance Due Date_1']) }
+      imported: { from: 'Tripleseat', eventId: tsId, leadId: String(r['Lead Id'] || '').trim(), actual: actual || 0, grandTotal: grand, deposit: deposit || 0, amountDue: due, importedAt: nowIso, breakdown: Object.keys(bk).length ? bk : null, depositDueDate: tsDate(r['Deposit Due Date'] || r['Deposit Due Date_1']), balanceDueDate: tsDate(r['Balance Due Date'] || r['Balance Due Date_1']) }
     });
   }
   return { events: out, skipped, unmatchedRooms: [...unmatchedRooms], add };
 }
-if (typeof module !== 'undefined') module.exports = { tripleseatToEvents, tsIsTripleseat };
+
+/* ---------- Tripleseat "Lead Details" export ---------- */
+const TS_LEAD_REQUIRED = ['Id', 'First Name', 'Last Name', 'Converted To', 'Nature Of Event'];
+function tsIsLeads(headers) { return TS_LEAD_REQUIRED.every(h => headers.includes(h)); }
+function tsLeadDate(v) { return tsDate(String(v || '').trim().split(/\s+/)[0]); }
+function tsDays(a, b) { return Math.abs((parseISO(a) - parseISO(b)) / 864e5); }
+
+/* existing: events already in the app. Leads that became events are skipped. */
+function tripleseatLeadsToEvents(rows, cfg, existing) {
+  const out = [], skipped = [], add = { eventTypes: [], staff: [], sources: [], lostReasons: [] };
+  const types = new Set(cfg.eventTypes || []), staff = new Set(cfg.staff || []), sources = new Set(cfg.sources || []), reasons = new Set(cfg.lostReasons || []);
+  const nowIso = new Date().toISOString(), today = todayISO();
+  const byLead = new Set(existing.map(e => e.imported && e.imported.leadId).filter(Boolean));
+  const norm = x => String(x || '').trim().toLowerCase();
+  let matched = 0;
+  for (const r of rows) {
+    const leadId = String(r['Id'] || '').trim(); if (!leadId) continue;
+    const first = String(r['First Name'] || '').trim(), last = String(r['Last Name'] || '').trim();
+    const person = String(r['Contact'] || '').trim() || [first, last].filter(Boolean).join(' ');
+    const label = String(r['Nature Of Event'] || '').trim() || person;
+    const email = String(r['Email'] || '').trim().split(/[\s,;]+/)[0] || '';
+    const all = [first, last, label, String(r['Company'] || ''), email].join(' ');
+    if (String(r['Deleted'] || '').trim()) { skipped.push({ name: label, why: 'Deleted in Tripleseat' }); continue; }
+    if (/\btest\b/i.test(all) || /@tripleseat\.com$/i.test(email)) { skipped.push({ name: label, why: 'Test lead' }); continue; }
+    if (/@bandstandbrewworks\.com$/i.test(email)) { skipped.push({ name: label, why: 'Internal (staff email)' }); continue; }
+    if (existing.some(e => e.id === 'tl' + leadId)) { /* already imported lead: update it */ }
+    else {
+      const submitted = tsLeadDate(r['Submitted']) || tsLeadDate(r['Converted']);
+      const twin = byLead.has(leadId) || existing.some(e => {
+        if (!e.client || (e.imported && e.imported.kind === 'lead')) return false;
+        const same = (email && norm(e.client.email) === norm(email)) || (norm(e.client.name) && [norm(person), norm(first + ' ' + last)].includes(norm(e.client.name)));
+        const created = String(e.createdAt || '').slice(0, 10);
+        return same && created && submitted && tsDays(created, submitted) <= 60;
+      });
+      if (twin) { matched++; continue; }
+    }
+    const ts = String(r['Status'] || '').trim().toUpperCase();
+    const date = tsDate(r['Event Date']);
+    const turnedDown = [r['Turned Down Reason Type'], r['Turned Down Reason Details']].map(x => String(x || '').trim()).filter(Boolean).join(': ');
+    let status, lostReason = '';
+    if (ts === 'LOST') { status = 'Lost'; lostReason = turnedDown || 'Lost in Tripleseat'; }
+    else if (ts === 'DEFINITE') status = 'Definite';
+    else if (ts === 'TENTATIVE') status = 'Tentative';
+    else if (ts === 'CLOSED') status = 'Completed';
+    else if (date && date < today) { status = 'Lost'; lostReason = turnedDown || 'No event booked'; }
+    else status = 'Lead';
+    if (lostReason && !reasons.has(lostReason)) { reasons.add(lostReason); add.lostReasons.push(lostReason); }
+    const style = String(r['Event Style'] || '').trim();
+    const type = style && !/on-premise/i.test(style) ? style : 'Private party';
+    if (!types.has(type)) { types.add(type); add.eventTypes.push(type); }
+    const owner = tsFirstName(r['Owner']);
+    if (owner && !staff.has(owner)) { staff.add(owner); add.staff.push(owner); }
+    let source = tsSource(r['Source']) || 'Other';
+    if (!sources.has(source)) { sources.add(source); add.sources.push(source); }
+    const start = tsTime(r['Start Time']) || cfg.defaultStart || '18:00';
+    const end = tsTime(r['End Time']) || cfg.defaultEnd || '22:00';
+    const company = String(r['Company'] || '').trim() || (norm(r['Account']) !== norm(person) ? String(r['Account'] || '').trim() : '');
+    const notes = [
+      String(r['Additional Information'] || '').trim(),
+      String(r['Referred By'] || '').trim() || String(r['Referral Details'] || '').trim() ? 'Referred by: ' + [r['Referred By'], r['Referral Details']].map(x => String(x || '').trim()).filter(Boolean).join(' — ') : '',
+      style ? 'Event style: ' + style : '',
+      String(r['Offsite Address'] || '').trim() ? 'Off-site address: ' + String(r['Offsite Address']).trim() : '',
+      String(r['Source'] || '').trim() ? 'Tripleseat source: ' + String(r['Source']).trim() : '',
+      String(r['Lead Form'] || '').trim() ? 'Came in through: ' + String(r['Lead Form']).trim() : '',
+      turnedDown ? 'Turned down: ' + turnedDown : '',
+      String(r['Converted To'] || '').trim() === 'Account/Contact' ? 'Tripleseat converted this lead to a contact but never created an event.' : ''
+    ].filter(Boolean).join('\n');
+    const submitted = tsLeadDate(r['Submitted']);
+    out.push({
+      id: 'tl' + leadId.replace(/[^0-9A-Za-z]/g, ''),
+      status, source, createdAt: submitted ? submitted + 'T12:00:00Z' : nowIso, updatedAt: nowIso,
+      title: label, type, date, start, end, spaceIds: [],
+      guests: Math.max(0, parseInt(String(r['Guest Count'] || '0').replace(/\D/g, ''), 10) || 0),
+      owner, followUp: status === 'Lead' ? addDays(today, 1) : '', lostReason, notes,
+      client: { name: person, email, phone: String(r['Phone'] || '').trim(), company, address: '' },
+      items: [], roomFee: 0, fbMinimum: 0,
+      serviceRate: num(cfg.serviceRate), taxRate: num(cfg.taxRate), depositPct: num(cfg.depositPct), taxService: !!cfg.taxService,
+      beo: { timeline: [], setup: '', music: '', bar: '', kitchen: '', staffing: '', allergies: '' },
+      contract: { sentAt: '', signedAt: '', signedName: '' }, toast: { invoiceNumber: '', invoiceUrl: '' },
+      payments: [],
+      activity: [{ at: nowIso, by: null, text: 'Imported from Tripleseat (lead #' + leadId + ')' }, ...(submitted ? [{ at: submitted + 'T12:00:00Z', by: null, text: 'Inquiry received in Tripleseat' }] : [])],
+      imported: { from: 'Tripleseat', kind: 'lead', leadId, importedAt: nowIso }
+    });
+  }
+  return { events: out, skipped, unmatchedRooms: [], add, matched, kind: 'leads' };
+}
+if (typeof module !== 'undefined') module.exports = { tripleseatToEvents, tsIsTripleseat, tripleseatLeadsToEvents, tsIsLeads };
