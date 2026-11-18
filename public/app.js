@@ -172,7 +172,7 @@ function fromHash(){
   let h='';try{h=location.hash.slice(1)}catch(e){}
   if(h.startsWith('event-')){S.view='event';S.eventId=h.slice(6);}
   else if(h.startsWith('customer-')){S.view='customer';try{S.eventId=decodeURIComponent(h.slice(9))}catch(e){S.eventId=h.slice(9)}}
-  else if(['pipeline','calendar','events','customers','reports','inquiry','settings'].includes(h)){S.view=h;if(h==='settings')S.draft=clone(S.config);}
+  else if(['pipeline','calendar','events','customers','reports','import','inquiry','settings'].includes(h)){S.view=h;if(h==='settings')S.draft=clone(S.config);}
 }
 window.addEventListener('hashchange',()=>{fromHash();render()});
 
@@ -193,7 +193,7 @@ function render(){
 function renderSide(){
   const evs=evList();
   const open=evs.filter(e=>e.status==='Lead'||e.status==='Proposal Sent').length;
-  const nav=[['pipeline','Pipeline',open],['calendar','Calendar',''],['events','All events',evs.length||''],['customers','Customers',customers().length||''],['reports','Reports',''],['inquiry','Website form',''],['settings','Settings','']];
+  const nav=[['pipeline','Pipeline',open],['calendar','Calendar',''],['events','All events',evs.length||''],['customers','Customers',customers().length||''],['reports','Reports',''],['import','Import',''],['inquiry','Website form',''],['settings','Settings','']];
   const on=S.view==='event'?'':S.view==='customer'?'customers':S.view;
   let status;
   status=S.stale?'<span class="dotline"><i class="off"></i>Can’t reach the database</span>':'<span class="dotline"><i></i>Live · saved to Supabase</span>';
@@ -211,6 +211,7 @@ function renderMain(){
     case 'calendar':return renderCalendar();
     case 'events':return renderEvents();
     case 'customers':return renderCustomers();
+    case 'import':return renderImport();
     case 'customer':return renderCustomer();
     case 'reports':return renderReports();
     case 'inquiry':return renderInquiry();
@@ -288,6 +289,76 @@ function renderCalendar(){
 }
 
 /* ---------- all events ---------- */
+/* ---------- import (Tripleseat CSV) ---------- */
+function renderImport(){
+  const im=S.imp||{};
+  let body='';
+  if(im.error) body=`<div class="banner bad">${esc(im.error)}</div>`;
+  if(im.result){
+    const r=im.result,evs=r.events;
+    const existing=evs.filter(e=>S.events.has(e.id)).length;
+    const byStatus={};evs.forEach(e=>byStatus[e.status]=(byStatus[e.status]||0)+1);
+    const tot=evs.reduce((a,e)=>a+totals(e).total,0);
+    const upcoming=evs.filter(e=>e.date>=todayISO()&&e.status!=='Lost').length;
+    const clients=new Set(evs.map(e=>custKey(e.client)).filter(Boolean)).size;
+    body+=`<div class="tiles"><div class="tile"><div class="k">Events to import</div><div class="v">${evs.length}</div><div class="s">${existing?existing+' already here (will be updated)':'all new'}</div></div><div class="tile"><div class="k">Upcoming</div><div class="v">${upcoming}</div><div class="s">Will appear in Pipeline &amp; Calendar</div></div><div class="tile"><div class="k">Customers</div><div class="v">${clients}</div></div><div class="tile"><div class="k">Event totals</div><div class="v">${money0(tot)}</div><div class="s">Tripleseat grand totals</div></div></div>
+    <div class="panel" style="margin-bottom:16px"><div class="row between"><div class="legend">${Object.entries(byStatus).map(([k,v])=>`<span class="pill ${sc(k)}">${esc(k)} · ${v}</span>`).join('')}</div>
+      <div class="row">${im.done?`<span class="flag ok">Imported ${im.done} events</span><button class="btn" data-act="nav" data-view="customers">View customers</button>`:`<button class="btn" data-act="imp-clear">Cancel</button><button class="btn primary" data-act="imp-run" ${S.readOnly||im.running?'disabled':''}>${im.running?`Importing ${im.progress||0} of ${evs.length}…`:`Import ${evs.length} events`}</button>`}</div></div>
+      ${r.skipped.length?`<p class="muted" style="font-size:13px;margin:12px 0 0">Skipping ${r.skipped.length}: ${r.skipped.map(x=>esc(x.name)+' ('+esc(x.why)+')').join('; ')}</p>`:''}
+      ${r.unmatchedRooms.length?`<p class="flag warn" style="display:inline-block;margin-top:10px">Rooms with no matching space: ${r.unmatchedRooms.map(esc).join(', ')}. Those events keep the room name in their notes.</p>`:''}
+      ${(r.add.eventTypes.length||r.add.staff.length||r.add.sources.length)?`<p class="muted" style="font-size:13px;margin:10px 0 0">Will also add to Settings lists: ${[r.add.eventTypes.length?'event types ('+r.add.eventTypes.map(esc).join(', ')+')':'',r.add.staff.length?'event managers ('+r.add.staff.map(esc).join(', ')+')':'',r.add.sources.length?'lead sources ('+r.add.sources.map(esc).join(', ')+')':''].filter(Boolean).join('; ')}.</p>`:''}
+    </div>
+    <div class="panel" style="padding:0"><div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Event</th><th>Client</th><th>Space</th><th class="num">Guests</th><th>Status</th><th class="num">Total</th><th class="num">Paid</th></tr></thead><tbody>
+    ${evs.slice().sort((a,b)=>(b.date||'').localeCompare(a.date||'')).map(e=>{const t=totals(e);return `<tr><td>${esc(fmtDate(e.date))}</td><td>${esc(e.title)}<div class="muted" style="font-size:12px">${esc(e.type)}</div></td><td>${esc(e.client.name)}</td><td>${esc(e.spaceIds.map(spaceName).join(', ')||'—')}</td><td class="num">${e.guests||'—'}</td><td><span class="pill ${sc(e.status)}">${e.status}</span></td><td class="num">${t.total?money(t.total):'—'}</td><td class="num">${t.paid?money(t.paid):'—'}</td></tr>`}).join('')}
+    </tbody></table></div></div>`;
+  }
+  return `<div class="page-head"><div><h1>Import past events</h1><p>Upload a Tripleseat <b>Event Details</b> report exported as CSV (Reports › Event Details › Export). You’ll see a preview before anything is saved. Importing the same file again updates those events instead of duplicating them.</p></div></div>
+  ${im.result?'':`<div class="panel" style="margin-bottom:16px"><label class="btn primary" for="imp-file" style="color:var(--accent-ink);display:inline-block">Choose CSV file…</label><input type="file" id="imp-file" data-import accept=".csv,text/csv" style="display:none" ${S.readOnly?'disabled':''}> <span class="muted" style="margin-left:8px">${im.fileName?esc(im.fileName):'No file chosen'}</span></div>`}
+  ${body}`;
+}
+function readImportFile(file){
+  S.imp={fileName:file.name};
+  if(!window.Papa){S.imp.error='The CSV reader didn’t load. Check your connection and reload the page.';render();return;}
+  window.Papa.parse(file,{header:true,skipEmptyLines:'greedy',complete:res=>{
+    const headers=res.meta.fields||[];
+    if(!tsIsTripleseat(headers)){S.imp.error='This doesn’t look like a Tripleseat Event Details export. It needs the columns Name, Status, Date and Event Id.';render();return;}
+    S.imp.result=tripleseatToEvents(res.data,S.config);
+    if(!S.imp.result.events.length)S.imp.error='No events found to import in this file.';
+    render();
+  },error:err=>{S.imp.error='Couldn’t read that file: '+(err&&err.message||'unknown error');render();}});
+}
+async function runImport(){
+  const im=S.imp;if(!im||!im.result||im.running)return;
+  im.running=true;im.progress=0;render();
+  const r=im.result;
+  // extend settings lists first
+  if(r.add.eventTypes.length||r.add.staff.length||r.add.sources.length){
+    const c=clone(S.config);
+    c.eventTypes=[...c.eventTypes,...r.add.eventTypes.filter(x=>!c.eventTypes.includes(x))];
+    c.staff=[...c.staff,...r.add.staff.filter(x=>!c.staff.includes(x))];
+    c.sources=[...c.sources,...r.add.sources.filter(x=>!c.sources.includes(x))];
+    persistConfig(c);
+  }
+  const rows=r.events.map(e=>{const prev=S.events.get(e.id);const ev=clone(e);
+    if(prev){ // keep anything added here after a previous import
+      ev.items=prev.items&&prev.items.length?prev.items:ev.items;ev.beo=prev.beo||ev.beo;ev.toast=prev.toast||ev.toast;
+      const extra=(prev.payments||[]).filter(p=>p.id!=='ts-paid');ev.payments=[...ev.payments,...extra];
+      ev.activity=[...ev.activity.slice(0,1),...(prev.activity||[])].slice(0,200);
+      if(prev.client&&(prev.client.email||prev.client.phone))ev.client=Object.assign({},ev.client,{email:prev.client.email,phone:prev.client.phone,company:prev.client.company||''});
+    }
+    const body=clone(ev);delete body.id;return {id:ev.id,data:body};});
+  let failed=0;
+  for(let i=0;i<rows.length;i+=50){
+    const chunk=rows.slice(i,i+50);
+    const {data,error}=await sb.from('private_events').upsert(chunk).select('id,data,client_token');
+    if(error){failed+=chunk.length;console.error(error);}
+    else (data||[]).forEach(row=>S.events.set(row.id,rowToEvent(row)));
+    im.progress=Math.min(rows.length,i+50);render();
+  }
+  im.running=false;
+  if(failed){im.error=`${failed} events couldn’t be saved. Check your connection and import again; it won’t create duplicates.`;}
+  im.done=rows.length-failed;render();
+}
 /* ---------- customers (built from events) ---------- */
 function custKey(c){
   c=c||{};const em=String(c.email||'').trim().toLowerCase();
@@ -342,7 +413,7 @@ function renderCustomer(){
     <div class="row"><button class="btn primary" data-act="new-for-customer" data-key="${esc(c.key)}" ${S.readOnly?'disabled':''}>+ New event for this client</button></div></div>
   <div class="tiles"><div class="tile"><div class="k">Events</div><div class="v">${c.events.length}</div><div class="s">${c.booked} booked</div></div><div class="tile"><div class="k">Lifetime spend</div><div class="v">${money0(c.spend)}</div><div class="s">Definite + completed</div></div><div class="tile"><div class="k">Avg event</div><div class="v">${avg?money0(avg):'—'}</div></div><div class="tile"><div class="k">Last / next</div><div class="v" style="font-size:20px">${c.last?esc(fmtDate(c.last)):'—'}</div><div class="s">Next: ${c.next?esc(fmtDate(c.next)):'none'}</div></div></div>
   <div class="panel" style="padding:0"><div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Event</th><th>Space</th><th class="num">Guests</th><th>Status</th><th class="num">Total</th><th class="num">Balance</th></tr></thead><tbody>
-  ${evs.map(e=>{const t=totals(e);return `<tr class="click" data-act="open-event" data-id="${esc(e.id)}"><td>${esc(fmtDate(e.date))}</td><td><b>${esc(e.title)}</b><div class="muted" style="font-size:12px">${esc(e.type||'')}${e.source==='Imported'?' · imported':''}</div></td><td>${esc((e.spaceIds||[]).map(spaceName).join(', '))}</td><td class="num">${num(e.guests)}</td><td><span class="pill ${sc(e.status)}">${esc(e.status)}</span></td><td class="num">${t.total?money0(t.total):'—'}</td><td class="num">${t.total?money0(t.balance):'—'}</td></tr>`}).join('')}
+  ${evs.map(e=>{const t=totals(e);return `<tr class="click" data-act="open-event" data-id="${esc(e.id)}"><td>${esc(fmtDate(e.date))}</td><td><b>${esc(e.title)}</b><div class="muted" style="font-size:12px">${esc(e.type||'')}${e.imported?' · from Tripleseat':''}</div></td><td>${esc((e.spaceIds||[]).map(spaceName).join(', '))}</td><td class="num">${num(e.guests)}</td><td><span class="pill ${sc(e.status)}">${esc(e.status)}</span></td><td class="num">${t.total?money0(t.total):'—'}</td><td class="num">${t.total?money0(t.balance):'—'}</td></tr>`}).join('')}
   </tbody></table></div></div>
   <p class="muted" style="font-size:12px;margin-top:10px">To update this client’s phone, email or company, edit it on their newest event. The newest details are shown here.</p>`;
 }
@@ -430,6 +501,12 @@ function catalogOptions(){
   return CATS.map(cat=>{const items=S.config.catalog.filter(i=>i.category===cat);return items.length?`<optgroup label="${esc(cat)}">${items.map(i=>`<option value="${esc(i.id)}" ${S.addItemSel===i.id?'selected':''}>${esc(i.name)} — ${money(i.price)} ${esc(i.unit)}</option>`).join('')}</optgroup>`:''}).join('');
 }
 function totalsBlock(t,ev){
+  if(t.imported) return `<div class="totals">
+    <span>Event subtotal (from Tripleseat)</span><span>${money(t.fb)}</span>
+    <span>Service charge, tax &amp; fees</span><span>${money(t.tax)}</span>
+    <span class="t">Total</span><span class="t">${money(t.total)}</span>
+    <span>Deposit</span><span>${money(t.depositDue)}</span>
+  </div><p class="muted" style="font-size:12px;text-align:right;margin:6px 0 0">Imported from Tripleseat. Adding a menu item here switches this event to Bandstand pricing.</p>`;
   return `<div class="totals">
     <span>Food &amp; beverage</span><span>${money(t.fb)}</span>
     ${t.shortfall?`<span>F&amp;B minimum shortfall (min ${money0(t.fbMin)})</span><span>${money(t.shortfall)}</span>`:''}
@@ -523,7 +600,7 @@ function tabContract(ev,t){
     ${S.toastText!=null?`<textarea readonly style="margin-top:10px;min-height:180px;font-family:ui-monospace,monospace;font-size:12px" aria-label="Invoice details">${esc(S.toastText)}</textarea>`:''}
     <p class="muted" style="margin:12px 0 0;font-size:12px">When Toast shows a payment, record it below as “Toast invoice (paid online)” so the balance and status update.</p>
   </div>
-  <div class="panel"><h3>Payments</h3>
+  <div class="panel" style="grid-column:1/-1"><h3>Payments</h3>
     <div class="totals" style="margin:0 0 14px;max-width:none"><span>Total</span><span>${money(t.total)}</span><span>Deposit due (${num(ev.depositPct)}%)</span><span>${money(t.depositDue)}</span><span>Received</span><span>${money(t.paid)}</span><span class="t">Balance</span><span class="t">${money(t.balance)}</span></div>
     <div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Type</th><th>Method</th><th class="num">Amount</th><th></th></tr></thead><tbody>
     ${pays.length?pays.map(p=>`<tr><td>${esc(fmtShort(p.date))}</td><td>${esc(p.kind)}${p.note?`<div class="muted" style="font-size:12px">${esc(p.note)}</div>`:''}</td><td>${esc(p.method)}</td><td class="num">${p.kind==='refund'?'−':''}${money(p.amount)}</td><td class="num"><button class="btn sm danger" data-act="del-pay" data-pid="${esc(p.id)}" ${ro}>Remove</button></td></tr>`).join(''):'<tr><td colspan="5" class="empty">No payments recorded.</td></tr>'}
@@ -654,6 +731,8 @@ document.addEventListener('click',e=>{
     case 'new-event':{if(S.readOnly)return toast('You have view-only access.');const n=newEvent();logAct(n,'Event created');persistEvent(n);S.tab='details';go('event',n.id);setTimeout(()=>{const f=document.getElementById('f-title');if(f){f.focus();f.select()}},30);break;}
     case 'open-event':S.tab='details';go('event',el.dataset.id);break;
     case 'open-customer':go('customer',el.dataset.key);break;
+    case 'imp-clear':S.imp=null;render();break;
+    case 'imp-run':runImport();break;
     case 'new-for-customer':{if(S.readOnly)return;const cu=customers().find(x=>x.key===el.dataset.key);if(!cu)return;const n=newEvent({client:{name:cu.name,email:cu.email,phone:cu.phone,company:cu.company},source:'Repeat client',title:(cu.company||cu.name||'New')+' event'});logAct(n,'Event created for repeat client');persistEvent(n);S.tab='details';go('event',n.id);break;}
     case 'tab':S.tab=el.dataset.tab;S.delArm=false;S.beoText=null;S.toastText=null;render();break;
     case 'copy-toast':{const text=toastInvoiceText(ev,totals(ev));S.toastText=text;copyText(text,()=>render(),'Invoice details copied');render();break;}
@@ -709,6 +788,7 @@ document.addEventListener('input',e=>{if(e.target.classList&&e.target.classList.
 document.addEventListener('change',e=>{
   const t=e.target;
   if(t.hasAttribute('data-logo')&&t.files&&t.files[0]&&S.draft){readLogo(t.files[0]);return;}
+  if(t.hasAttribute('data-import')&&t.files&&t.files[0]){readImportFile(t.files[0]);return;}
   if(t.dataset.ui){const k=t.dataset.ui;S[k]=k==='reportYear'?Number(t.value):t.value;render();return;}
   if(t.hasAttribute('data-status')){const v=t.value;mutate(S.eventId,x=>{setStatus(x,v)});return;}
   if(t.dataset.space){const id=t.dataset.space,on=t.checked;mutate(S.eventId,x=>{x.spaceIds=x.spaceIds||[];x.spaceIds=on?[...new Set([...x.spaceIds,id])]:x.spaceIds.filter(s=>s!==id);if(!num(x.roomFee)&&!num(x.fbMinimum)||!x.items.length)applySpacePricing(x)},(on?'Added space: ':'Removed space: ')+spaceName(id));return;}

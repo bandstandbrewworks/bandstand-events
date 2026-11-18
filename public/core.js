@@ -26,6 +26,13 @@ function linesFrom(s){return String(s||'').split(/\n|,/).map(x=>x.trim()).filter
 const USD=new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'});
 const USD0=new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:0});
 function totals(ev){
+  // Events imported from Tripleseat keep Tripleseat's totals until someone adds menu items here.
+  if(ev.imported&&ev.imported.grandTotal!=null&&!(ev.items||[]).length){
+    const total=r2(num(ev.imported.grandTotal)),actual=r2(num(ev.imported.actual));
+    const paid=r2((ev.payments||[]).reduce((a,p)=>a+(p.kind==='refund'?-num(p.amount):num(p.amount)),0));
+    const depositDue=r2(num(ev.imported.deposit));
+    return {fb:actual,other:0,roomFee:0,fbMin:0,shortfall:0,service:0,tax:r2(total-actual),total,depositDue,paid,balance:r2(total-paid),depositMet:paid>=depositDue-0.005&&total>0,imported:true};
+  }
   const items=ev.items||[];
   let fb=0, other=0;
   for(const it of items){const lt=r2(num(it.price)*num(it.qty)); if(FB.includes(it.category)) fb+=lt; else other+=lt;}

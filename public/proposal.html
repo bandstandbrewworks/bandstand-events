@@ -19,6 +19,13 @@ const root=document.getElementById('root');
 const token=new URLSearchParams(location.search).get('t')||'';
 let P=null,msg='';
 function totalsBlock(t,ev){
+  if(t.imported) return `<div class="totals">
+    <span>Event subtotal</span><span>${money(t.fb)}</span>
+    <span>Service charge, tax &amp; fees</span><span>${money(t.tax)}</span>
+    <span class="t">Total</span><span class="t">${money(t.total)}</span>
+    <span>Deposit</span><span>${money(t.depositDue)}</span>
+    ${t.paid?`<span>Paid so far</span><span>${money(t.paid)}</span><span><b>Balance</b></span><span><b>${money(t.balance)}</b></span>`:''}
+  </div>`;
   return `<div class="totals">
     <span>Food &amp; beverage</span><span>${money(t.fb)}</span>
     ${t.shortfall?`<span>Food &amp; beverage minimum (${money0(t.fbMin)})</span><span>${money(t.shortfall)}</span>`:''}
