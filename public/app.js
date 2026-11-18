@@ -84,7 +84,7 @@ function conflicts(ev){
   }
   return out;
 }
-function balanceDueDate(ev){return ev.date?addDays(ev.date,-num(S.config.balanceDueDays)):''}
+function balanceDueDate(ev){if(ev.imported&&ev.imported.balanceDueDate&&!(ev.items||[]).length)return ev.imported.balanceDueDate;return ev.date?addDays(ev.date,-num(S.config.balanceDueDays)):''}
 
 /* ---------- persistence (Supabase) ---------- */
 const chains={};
@@ -301,7 +301,7 @@ function renderImport(){
     const tot=evs.reduce((a,e)=>a+totals(e).total,0);
     const upcoming=evs.filter(e=>e.date>=todayISO()&&e.status!=='Lost').length;
     const clients=new Set(evs.map(e=>custKey(e.client)).filter(Boolean)).size;
-    body+=`<div class="tiles"><div class="tile"><div class="k">Events to import</div><div class="v">${evs.length}</div><div class="s">${existing?existing+' already here (will be updated)':'all new'}</div></div><div class="tile"><div class="k">Upcoming</div><div class="v">${upcoming}</div><div class="s">Will appear in Pipeline &amp; Calendar</div></div><div class="tile"><div class="k">Customers</div><div class="v">${clients}</div></div><div class="tile"><div class="k">Event totals</div><div class="v">${money0(tot)}</div><div class="s">Tripleseat grand totals</div></div></div>
+    body+=`<div class="tiles"><div class="tile"><div class="k">Events to import</div><div class="v">${evs.length}</div><div class="s">${existing?existing+' already here (will be updated)':'all new'}</div></div><div class="tile"><div class="k">Upcoming</div><div class="v">${upcoming}</div><div class="s">Will appear in Pipeline &amp; Calendar</div></div><div class="tile"><div class="k">Customers</div><div class="v">${clients}</div><div class="s">${evs.filter(e=>e.client.email).length} events with an email</div></div><div class="tile"><div class="k">Event totals</div><div class="v">${money0(tot)}</div><div class="s">Tripleseat grand totals</div></div></div>
     <div class="panel" style="margin-bottom:16px"><div class="row between"><div class="legend">${Object.entries(byStatus).map(([k,v])=>`<span class="pill ${sc(k)}">${esc(k)} · ${v}</span>`).join('')}</div>
       <div class="row">${im.done?`<span class="flag ok">Imported ${im.done} events</span><button class="btn" data-act="nav" data-view="customers">View customers</button>`:`<button class="btn" data-act="imp-clear">Cancel</button><button class="btn primary" data-act="imp-run" ${S.readOnly||im.running?'disabled':''}>${im.running?`Importing ${im.progress||0} of ${evs.length}…`:`Import ${evs.length} events`}</button>`}</div></div>
       ${r.skipped.length?`<p class="muted" style="font-size:13px;margin:12px 0 0">Skipping ${r.skipped.length}: ${r.skipped.map(x=>esc(x.name)+' ('+esc(x.why)+')').join('; ')}</p>`:''}
@@ -340,11 +340,19 @@ async function runImport(){
     persistConfig(c);
   }
   const rows=r.events.map(e=>{const prev=S.events.get(e.id);const ev=clone(e);
-    if(prev){ // keep anything added here after a previous import
+    if(prev){
+      const edited=prev.imported&&prev.updatedAt&&prev.imported.importedAt&&prev.updatedAt>prev.imported.importedAt;
+      const cl={};['name','email','phone','company','address'].forEach(f=>{cl[f]=(prev.client&&prev.client[f])||(ev.client&&ev.client[f])||''});
+      if(edited){ // changed in this app since the last import: keep those changes, only fill in what's missing
+        const keep=clone(prev);delete keep.id;keep.client=cl;
+        keep.imported=Object.assign({},ev.imported,prev.imported||{},{breakdown:(prev.imported&&prev.imported.breakdown)||ev.imported.breakdown,depositDueDate:(prev.imported&&prev.imported.depositDueDate)||ev.imported.depositDueDate,balanceDueDate:(prev.imported&&prev.imported.balanceDueDate)||ev.imported.balanceDueDate});
+        if(!keep.notes&&ev.notes)keep.notes=ev.notes;
+        return {id:ev.id,data:keep};
+      }
+      ev.client=cl;
       ev.items=prev.items&&prev.items.length?prev.items:ev.items;ev.beo=prev.beo||ev.beo;ev.toast=prev.toast||ev.toast;
       const extra=(prev.payments||[]).filter(p=>p.id!=='ts-paid');ev.payments=[...ev.payments,...extra];
       ev.activity=[...ev.activity.slice(0,1),...(prev.activity||[])].slice(0,200);
-      if(prev.client&&(prev.client.email||prev.client.phone))ev.client=Object.assign({},ev.client,{email:prev.client.email,phone:prev.client.phone,company:prev.client.company||''});
     }
     const body=clone(ev);delete body.id;return {id:ev.id,data:body};});
   let failed=0;
@@ -374,11 +382,11 @@ function customers(){
   for(const e of S.events.values()){
     const k=custKey(e.client);if(!k)continue;
     let c=map.get(k);
-    if(!c){c={key:k,name:'',company:'',email:'',phone:'',events:[],booked:0,spend:0,last:'',next:'',updated:''};map.set(k,c);}
+    if(!c){c={key:k,name:'',company:'',email:'',phone:'',address:'',events:[],booked:0,spend:0,last:'',next:'',updated:''};map.set(k,c);}
     c.events.push(e);
     // newest non-empty contact details win
     const u=e.updatedAt||e.createdAt||'';
-    ['name','company','email','phone'].forEach(f=>{const v=e.client&&e.client[f];if(v&&(!c[f]||u>=c['_'+f])){c[f]=v;c['_'+f]=u}});
+    ['name','company','email','phone','address'].forEach(f=>{const v=e.client&&e.client[f];if(v&&(!c[f]||u>=c['_'+f])){c[f]=v;c['_'+f]=u}});
     if(BOOKED.includes(e.status)){c.booked++;c.spend+=totals(e).total;}
     const t=todayISO();
     if(e.date&&e.date<t&&e.status!=='Lost'&&e.date>c.last)c.last=e.date;
@@ -409,7 +417,7 @@ function renderCustomer(){
   const avg=c.booked?c.spend/c.booked:0;
   return `${staleBanner()}<button class="link" data-act="nav" data-view="customers" style="margin-bottom:10px">‹ Customers</button>
   <div class="det-head"><div><div class="row"><h1>${esc(c.name||'(no name)')}</h1>${c.booked>1?'<span class="flag ok">Repeat client</span>':''}</div>
-    <div class="meta">${[c.company,c.email,c.phone].filter(Boolean).map(esc).join(' · ')||'No contact details'}</div></div>
+    <div class="meta">${[c.company,c.email,c.phone].filter(Boolean).map(esc).join(' · ')||'No contact details'}</div>${c.address?`<div class="meta" style="margin-top:2px">${esc(c.address)}</div>`:''}</div>
     <div class="row"><button class="btn primary" data-act="new-for-customer" data-key="${esc(c.key)}" ${S.readOnly?'disabled':''}>+ New event for this client</button></div></div>
   <div class="tiles"><div class="tile"><div class="k">Events</div><div class="v">${c.events.length}</div><div class="s">${c.booked} booked</div></div><div class="tile"><div class="k">Lifetime spend</div><div class="v">${money0(c.spend)}</div><div class="s">Definite + completed</div></div><div class="tile"><div class="k">Avg event</div><div class="v">${avg?money0(avg):'—'}</div></div><div class="tile"><div class="k">Last / next</div><div class="v" style="font-size:20px">${c.last?esc(fmtDate(c.last)):'—'}</div><div class="s">Next: ${c.next?esc(fmtDate(c.next)):'none'}</div></div></div>
   <div class="panel" style="padding:0"><div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Event</th><th>Space</th><th class="num">Guests</th><th>Status</th><th class="num">Total</th><th class="num">Balance</th></tr></thead><tbody>
@@ -481,7 +489,7 @@ function tabDetails(ev,cap){
   const c=S.config;
   return `<div class="grid2">
   <div class="panel"><div class="row between" style="margin-bottom:12px"><h3>Contact</h3>${(()=>{const cu=customerOf(ev);const others=cu?cu.events.length-1:0;return cu?`<button class="link" data-act="open-customer" data-key="${esc(cu.key)}">${others?`Repeat client · ${others} other event${others>1?'s':''}`:'Customer profile'} ›</button>`:''})()}</div><div class="fields">
-    ${inp(ev,'Name','client.name')}${inp(ev,'Company / organization','client.company')}${inp(ev,'Email','client.email','email')}${inp(ev,'Phone','client.phone','tel')}
+    ${inp(ev,'Name','client.name')}${inp(ev,'Company / organization','client.company')}${inp(ev,'Email','client.email','email')}${inp(ev,'Phone','client.phone','tel')}${inp(ev,'Address','client.address','text',{wide:true})}
   </div></div>
   <div class="panel"><h3>Booking</h3><div class="fields">
     ${inp(ev,'Event name','title','text',{wide:true})}${sel(ev,'Event type','type',c.eventTypes)}${inp(ev,'Guests','guests','number')}
@@ -500,10 +508,18 @@ function descRows(t){t=String(t||'');return Math.max(1,Math.min(8,Math.ceil(t.le
 function catalogOptions(){
   return CATS.map(cat=>{const items=S.config.catalog.filter(i=>i.category===cat);return items.length?`<optgroup label="${esc(cat)}">${items.map(i=>`<option value="${esc(i.id)}" ${S.addItemSel===i.id?'selected':''}>${esc(i.name)} — ${money(i.price)} ${esc(i.unit)}</option>`).join('')}</optgroup>`:''}).join('');
 }
+function importedLines(ev,t){
+  const b=ev.imported&&ev.imported.breakdown;
+  if(!b)return `<span>Event subtotal (from Tripleseat)</span><span>${money(t.fb)}</span><span>Service charge, tax &amp; fees</span><span>${money(t.tax)}</span>`;
+  const L=[['food','Food'],['beverage','Beverage'],['av','Audio / visual'],['labor','Labor'],['roomRental','Room rental'],['linens','Linens'],['rentals','Rentals'],['misc','Misc'],['discounts','Discounts'],['gratuity','Gratuity'],['adminFee','Admin fee'],['salesTax','Sales tax']];
+  let sum=0;const rows=L.filter(([k])=>b[k]).map(([k,l])=>{sum+=k==='discounts'?-Math.abs(b[k]):b[k];return `<span>${l}</span><span>${k==='discounts'?'−'+money(Math.abs(b[k])):money(b[k])}</span>`});
+  const other=r2(t.total-sum);
+  if(Math.abs(other)>0.01)rows.push(`<span>Other charges</span><span>${money(other)}</span>`);
+  return rows.join('');
+}
 function totalsBlock(t,ev){
   if(t.imported) return `<div class="totals">
-    <span>Event subtotal (from Tripleseat)</span><span>${money(t.fb)}</span>
-    <span>Service charge, tax &amp; fees</span><span>${money(t.tax)}</span>
+    ${importedLines(ev,t)}
     <span class="t">Total</span><span class="t">${money(t.total)}</span>
     <span>Deposit</span><span>${money(t.depositDue)}</span>
   </div><p class="muted" style="font-size:12px;text-align:right;margin:6px 0 0">Imported from Tripleseat. Adding a menu item here switches this event to Bandstand pricing.</p>`;

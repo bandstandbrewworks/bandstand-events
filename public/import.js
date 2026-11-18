@@ -68,6 +68,15 @@ function tripleseatToEvents(rows, cfg) {
     if (!types.has(type)) { types.add(type); add.eventTypes.push(type); }
     // people
     const contact = String(r['Contact'] || '').trim() || String(r['Lead'] || '').trim();
+    const email = String(r['Contact Email'] || '').trim().split(/[\s,;]+/)[0] || '';
+    const phone = String(r['Contact Phone'] || '').trim() || String(r['Contact Mobile'] || '').trim();
+    const acct = String(r['Account'] || '').trim();
+    const company = acct && !acct.includes('?') && acct.toLowerCase() !== contact.toLowerCase() && acct.toLowerCase() !== String(r['Lead'] || '').trim().toLowerCase() ? acct : '';
+    const cityLine = [String(r['Contact City'] || '').trim(), [String(r['Contact State'] || '').trim(), String(r['Contact Zip'] || '').trim()].filter(Boolean).join(' ')].filter(Boolean).join(', ');
+    const address = [String(r['Contact Street Address'] || '').trim(), cityLine].filter(Boolean).join(', ');
+    const secondary = String(r['Secondary Contacts'] || '').trim();
+    // money breakdown (newer exports)
+    const bk = {}; [['food','Food'],['beverage','Beverage'],['av','Audio/Visual'],['labor','Labor'],['misc','Misc'],['roomRental','Room Rental'],['linens','Linens'],['rentals','Rentals'],['gratuity','Gratuity'],['adminFee','Admin Fee'],['salesTax','Sales Tax'],['discounts','Discounts']].forEach(([k,h]) => { const v = tsMoney(r[h]); if (v) bk[k] = v; });
     const ownerRaw = String(r['Owner'] || r['Lead Owner'] || '').trim();
     const owner = tsFirstName(ownerRaw);
     if (owner && !staff.has(owner)) { staff.add(owner); add.staff.push(owner); }
@@ -92,7 +101,9 @@ function tripleseatToEvents(rows, cfg) {
       String(r['Source'] || '').trim() ? 'Tripleseat source: ' + String(r['Source']).trim() : '',
       String(r['Lost Reason Details'] || '').trim() ? 'Lost reason: ' + String(r['Lost Reason Details']).trim() : '',
       due != null && due < -0.004 ? 'Tripleseat showed a credit of ' + money(-due) + ' on this event.' : '',
-      String(r['Lead'] || '').trim() && String(r['Lead']).trim() !== contact ? 'Lead name in Tripleseat: ' + String(r['Lead']).trim() : ''
+      String(r['Lead'] || '').trim() && String(r['Lead']).trim() !== contact ? 'Lead name in Tripleseat: ' + String(r['Lead']).trim() : '',
+      secondary ? 'Secondary contact: ' + secondary : '',
+      String(r['Contact Mobile'] || '').trim() && String(r['Contact Phone'] || '').trim() ? 'Mobile: ' + String(r['Contact Mobile']).trim() : ''
     ].filter(Boolean).join('\n');
     const created = tsDate(r['Date Created']) || tsDate(r['Lead Submitted']) || date;
     const definite = tsDate(r['Definite Date']);
@@ -105,14 +116,14 @@ function tripleseatToEvents(rows, cfg) {
       title: name, type, date, start, end, spaceIds,
       guests: Math.max(0, parseInt(String(r['Guests'] || r['Guar. Guests'] || '0').replace(/\D/g, ''), 10) || 0),
       owner, followUp: '', lostReason: status === 'Lost' ? (String(r['Lost Reason Details'] || '').trim() || '') : '', notes,
-      client: { name: contact, email: '', phone: '', company: '' },
+      client: { name: contact, email, phone, company, address },
       items: [], roomFee: 0, fbMinimum: fbMin || 0,
       serviceRate: num(cfg.serviceRate), taxRate: num(cfg.taxRate), depositPct: num(cfg.depositPct), taxService: !!cfg.taxService,
       beo: { timeline: [], setup: '', music: '', bar: '', kitchen: '', staffing: '', allergies: '' },
       contract: { sentAt: '', signedAt: definite && ['Definite', 'Completed'].includes(status) ? definite + 'T12:00:00Z' : '', signedName: definite && ['Definite', 'Completed'].includes(status) ? contact + ' (Tripleseat)' : '' },
       toast: { invoiceNumber: '', invoiceUrl: '' },
       payments, activity,
-      imported: { from: 'Tripleseat', eventId: tsId, actual: actual || 0, grandTotal: grand, deposit: deposit || 0, amountDue: due, importedAt: nowIso }
+      imported: { from: 'Tripleseat', eventId: tsId, actual: actual || 0, grandTotal: grand, deposit: deposit || 0, amountDue: due, importedAt: nowIso, breakdown: Object.keys(bk).length ? bk : null, depositDueDate: tsDate(r['Deposit Due Date'] || r['Deposit Due Date_1']), balanceDueDate: tsDate(r['Balance Due Date'] || r['Balance Due Date_1']) }
     });
   }
   return { events: out, skipped, unmatchedRooms: [...unmatchedRooms], add };
