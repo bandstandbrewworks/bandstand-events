@@ -410,6 +410,43 @@ function renderCustomers(){
   ${list.length?list.map(c=>`<tr class="click" data-act="open-customer" data-key="${esc(c.key)}"><td><b>${esc(c.name||'(no name)')}</b>${c.company?`<div class="muted" style="font-size:12px">${esc(c.company)}</div>`:''}${c.booked>1?' <span class="flag ok">Repeat</span>':''}</td><td style="font-size:13px">${esc(c.email)}${c.phone?`<div class="muted">${esc(c.phone)}</div>`:''}</td><td class="num">${c.events.length}</td><td class="num">${c.booked}</td><td class="num">${c.spend?money0(c.spend):'—'}</td><td>${c.last?esc(fmtDate(c.last)):'—'}</td><td>${c.next?esc(fmtDate(c.next)):'—'}</td></tr>`).join(''):`<tr><td colspan="7" class="empty">${all?'No customers match.':'No customers yet. They appear here as soon as an event has a client name, email or phone.'}</td></tr>`}
   </tbody></table></div></div>`;
 }
+function custEditForm(c){
+  const d=S.custEdit,t=todayISO();
+  const upcoming=c.events.filter(e=>(e.date||'9999')>=t).length;
+  const nk=custKey({name:d.name,email:d.email,phone:d.phone});
+  const other=nk&&nk!==c.key?customers().find(x=>x.key===nk):null;
+  const f=(k,l,type)=>`<div class="f ${k==='address'?'wide':''}"><label for="ce-${k}">${l}</label><input type="${type||'text'}" id="ce-${k}" data-cedit="${k}" value="${esc(d[k]||'')}"></div>`;
+  return `<form class="panel" data-form="cust-edit" style="margin-bottom:16px;border-left:3px solid var(--accent)"><h3 style="margin-bottom:12px">Edit contact</h3>
+    <div class="fields">${f('name','Name')}${f('company','Company / organization')}${f('email','Email','email')}${f('phone','Phone','tel')}${f('address','Address')}</div>
+    <div class="row" style="margin-top:14px;gap:18px">
+      <label class="check" for="ce-scope-all"><input type="radio" id="ce-scope-all" name="scope" value="all" ${d.scope!=='upcoming'?'checked':''} data-cedit="scope"> Update all ${c.events.length} event${c.events.length>1?'s':''}</label>
+      <label class="check" for="ce-scope-up"><input type="radio" id="ce-scope-up" name="scope" value="upcoming" ${d.scope==='upcoming'?'checked':''} data-cedit="scope" ${upcoming?'':'disabled'}> Only upcoming events (${upcoming})</label>
+    </div>
+    ${other?`<p class="flag warn" style="display:inline-block;margin-top:10px">${esc(other.name||'Another customer')} already uses this ${d.email&&String(d.email).trim().toLowerCase()===other.key?'email':'contact info'}. Saving will combine the two customers.</p>`:''}
+    <div class="row" style="margin-top:14px"><button class="btn primary" type="submit">Save contact</button><button class="btn" type="button" data-act="cust-edit-cancel">Cancel</button></div></form>`;
+}
+function saveCustomerEdit(){
+  const d=S.custEdit;if(!d)return;
+  const c=customers().find(x=>x.key===d.key);if(!c){S.custEdit=null;render();return;}
+  const vals={name:String(d.name||'').trim(),company:String(d.company||'').trim(),email:String(d.email||'').trim(),phone:String(d.phone||'').trim(),address:String(d.address||'').trim()};
+  if(!vals.name&&!vals.email&&!vals.phone){toast('Enter at least a name, email or phone.');return;}
+  if(vals.email&&!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(vals.email)){toast('That email address doesn’t look right.');return;}
+  const t=todayISO();
+  const targets=c.events.filter(e=>d.scope==='upcoming'?(e.date||'9999')>=t:true);
+  let n=0;
+  targets.forEach(e=>{
+    const ev=clone(S.events.get(e.id));const before=ev.client||{};
+    const changed=Object.keys(vals).filter(k=>(before[k]||'')!==vals[k]);
+    if(!changed.length)return;
+    ev.client=Object.assign({},before,vals);
+    logAct(ev,'Contact updated from customer profile ('+changed.join(', ')+')');
+    persistEvent(ev);n++;
+  });
+  S.custEdit=null;
+  const nk=custKey(vals)||d.key;
+  toast(n?`Contact updated on ${n} event${n>1?'s':''}`:'Nothing changed');
+  go('customer',d.scope==='upcoming'&&targets.length<c.events.length?d.key:nk);
+}
 function renderCustomer(){
   const c=customers().find(x=>x.key===S.eventId);
   if(!c)return `<div class="page-head"><div><h1>Customer not found</h1><p>Their events may have been deleted or their email changed.</p></div></div><button class="btn" data-act="nav" data-view="customers">Back to customers</button>`;
@@ -418,12 +455,13 @@ function renderCustomer(){
   return `${staleBanner()}<button class="link" data-act="nav" data-view="customers" style="margin-bottom:10px">‹ Customers</button>
   <div class="det-head"><div><div class="row"><h1>${esc(c.name||'(no name)')}</h1>${c.booked>1?'<span class="flag ok">Repeat client</span>':''}</div>
     <div class="meta">${[c.company,c.email,c.phone].filter(Boolean).map(esc).join(' · ')||'No contact details'}</div>${c.address?`<div class="meta" style="margin-top:2px">${esc(c.address)}</div>`:''}</div>
-    <div class="row"><button class="btn primary" data-act="new-for-customer" data-key="${esc(c.key)}" ${S.readOnly?'disabled':''}>+ New event for this client</button></div></div>
+    <div class="row"><button class="btn" data-act="cust-edit" data-key="${esc(c.key)}" ${S.readOnly?'disabled':''}>Edit contact</button><button class="btn primary" data-act="new-for-customer" data-key="${esc(c.key)}" ${S.readOnly?'disabled':''}>+ New event for this client</button></div></div>
+  ${S.custEdit&&S.custEdit.key===c.key?custEditForm(c):''}
   <div class="tiles"><div class="tile"><div class="k">Events</div><div class="v">${c.events.length}</div><div class="s">${c.booked} booked</div></div><div class="tile"><div class="k">Lifetime spend</div><div class="v">${money0(c.spend)}</div><div class="s">Definite + completed</div></div><div class="tile"><div class="k">Avg event</div><div class="v">${avg?money0(avg):'—'}</div></div><div class="tile"><div class="k">Last / next</div><div class="v" style="font-size:20px">${c.last?esc(fmtDate(c.last)):'—'}</div><div class="s">Next: ${c.next?esc(fmtDate(c.next)):'none'}</div></div></div>
   <div class="panel" style="padding:0"><div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Event</th><th>Space</th><th class="num">Guests</th><th>Status</th><th class="num">Total</th><th class="num">Balance</th></tr></thead><tbody>
   ${evs.map(e=>{const t=totals(e);return `<tr class="click" data-act="open-event" data-id="${esc(e.id)}"><td>${esc(fmtDate(e.date))}</td><td><b>${esc(e.title)}</b><div class="muted" style="font-size:12px">${esc(e.type||'')}${e.imported?' · from Tripleseat':''}</div></td><td>${esc((e.spaceIds||[]).map(spaceName).join(', '))}</td><td class="num">${num(e.guests)}</td><td><span class="pill ${sc(e.status)}">${esc(e.status)}</span></td><td class="num">${t.total?money0(t.total):'—'}</td><td class="num">${t.total?money0(t.balance):'—'}</td></tr>`}).join('')}
   </tbody></table></div></div>
-  <p class="muted" style="font-size:12px;margin-top:10px">To update this client’s phone, email or company, edit it on their newest event. The newest details are shown here.</p>`;
+  ${S.custEdit&&S.custEdit.key===c.key?'':`<p class="muted" style="font-size:12px;margin-top:10px">Use Edit contact to update this client’s details on all of their events at once.</p>`}`;
 }
 function renderEvents(){
   const q=S.listQ.trim().toLowerCase();
@@ -746,7 +784,9 @@ document.addEventListener('click',e=>{
     case 'back':history.length>1?history.back():go('pipeline');break;
     case 'new-event':{if(S.readOnly)return toast('You have view-only access.');const n=newEvent();logAct(n,'Event created');persistEvent(n);S.tab='details';go('event',n.id);setTimeout(()=>{const f=document.getElementById('f-title');if(f){f.focus();f.select()}},30);break;}
     case 'open-event':S.tab='details';go('event',el.dataset.id);break;
-    case 'open-customer':go('customer',el.dataset.key);break;
+    case 'open-customer':S.custEdit=null;go('customer',el.dataset.key);break;
+    case 'cust-edit':{const c=customers().find(x=>x.key===el.dataset.key);if(!c)return;S.custEdit={key:c.key,name:c.name,company:c.company,email:c.email,phone:c.phone,address:c.address,scope:'all'};render();setTimeout(()=>{const f=document.getElementById('ce-name');if(f)f.focus()},20);break;}
+    case 'cust-edit-cancel':S.custEdit=null;render();break;
     case 'imp-clear':S.imp=null;render();break;
     case 'imp-run':runImport();break;
     case 'new-for-customer':{if(S.readOnly)return;const cu=customers().find(x=>x.key===el.dataset.key);if(!cu)return;const n=newEvent({client:{name:cu.name,email:cu.email,phone:cu.phone,company:cu.company},source:'Repeat client',title:(cu.company||cu.name||'New')+' event'});logAct(n,'Event created for repeat client');persistEvent(n);S.tab='details';go('event',n.id);break;}
@@ -800,11 +840,13 @@ function readLogo(file){
 /* ---------- events: inputs ---------- */
 document.addEventListener('input',e=>{if(e.target.classList&&e.target.classList.contains('desc-box'))e.target.rows=descRows(e.target.value);if(e.target.matches('[data-bind],[data-sbind],[data-slist]'))e.target.dataset.dirty='1';
   if(e.target.dataset.ui==='listQ'){S.listQ=e.target.value;scheduleRender();}
-  if(e.target.dataset.ui==='custQ'){S.custQ=e.target.value;scheduleRender();}});
+  if(e.target.dataset.ui==='custQ'){S.custQ=e.target.value;scheduleRender();}
+  if(e.target.dataset.cedit&&S.custEdit&&e.target.type!=='radio'){S.custEdit[e.target.dataset.cedit]=e.target.value;}});
 document.addEventListener('change',e=>{
   const t=e.target;
   if(t.hasAttribute('data-logo')&&t.files&&t.files[0]&&S.draft){readLogo(t.files[0]);return;}
   if(t.hasAttribute('data-import')&&t.files&&t.files[0]){readImportFile(t.files[0]);return;}
+  if(t.dataset.cedit&&S.custEdit){S.custEdit[t.dataset.cedit]=t.value;scheduleRender();return;}
   if(t.dataset.ui){const k=t.dataset.ui;S[k]=k==='reportYear'?Number(t.value):t.value;render();return;}
   if(t.hasAttribute('data-status')){const v=t.value;mutate(S.eventId,x=>{setStatus(x,v)});return;}
   if(t.dataset.space){const id=t.dataset.space,on=t.checked;mutate(S.eventId,x=>{x.spaceIds=x.spaceIds||[];x.spaceIds=on?[...new Set([...x.spaceIds,id])]:x.spaceIds.filter(s=>s!==id);if(!num(x.roomFee)&&!num(x.fbMinimum)||!x.items.length)applySpacePricing(x)},(on?'Added space: ':'Removed space: ')+spaceName(id));return;}
@@ -827,6 +869,7 @@ document.addEventListener('submit',e=>{
   switch(f.dataset.form){
     case 'pay':{const amt=r2(num(fd.amount));if(amt<=0)return toast('Enter an amount above $0.');mutate(S.eventId,x=>{x.payments.push({id:uid(),date:fd.date||todayISO(),amount:amt,method:fd.method,kind:fd.kind,note:fd.note||''});autoAdvance(x)},`Recorded ${fd.kind} of ${money(amt)} (${fd.method})`);toast('Payment recorded');break;}
     case 'sign':{const nm=String(fd.name||'').trim();if(!nm||!fd.agree)return;mutate(S.eventId,x=>{x.contract.signedAt=new Date().toISOString();x.contract.signedName=nm;if(['Lead','Proposal Sent'].includes(x.status))setStatus(x,'Tentative');autoAdvance(x)},`Paper contract signed by ${nm} (recorded by staff)`);toast('Signature recorded');break;}
+    case 'cust-edit':saveCustomerEdit();break;
     case 'note':{const tx=String(fd.text||'').trim();if(!tx)return;mutate(S.eventId,x=>{},'Note: '+tx);break;}
     case 'login':{S.authMsg='';S.loginEmail=String(fd.email||'').trim();sb.auth.signInWithPassword({email:String(fd.email||'').trim(),password:String(fd.password||'')}).then(({error})=>{if(error){S.authMsg=error.message||'Sign-in failed.';render();}else afterLogin();});break;}
   }
