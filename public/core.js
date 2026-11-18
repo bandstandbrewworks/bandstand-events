@@ -40,13 +40,14 @@ function totals(ev){
   const roomFee=num(ev.roomFee), fbMin=num(ev.fbMinimum);
   const shortfall=r2(Math.max(0,fbMin-fb));
   const service=r2(num(ev.serviceRate)/100*(fb+shortfall));
-  const taxable=fb+shortfall+other+roomFee+(ev.taxService?service:0);
+  const adminFee=r2(num(ev.adminFeeRate)/100*(fb+shortfall));
+  const taxable=fb+shortfall+other+roomFee+(ev.taxService?service+adminFee:0);
   const tax=r2(num(ev.taxRate)/100*taxable);
-  const total=r2(fb+shortfall+other+roomFee+service+tax);
+  const total=r2(fb+shortfall+other+roomFee+service+adminFee+tax);
   const depositDue=r2(total*num(ev.depositPct)/100);
   const paid=r2((ev.payments||[]).reduce((a,p)=>a+(p.kind==='refund'?-num(p.amount):num(p.amount)),0));
   const balance=r2(total-paid);
-  return {fb,other,roomFee,fbMin,shortfall,service,tax,total,depositDue,paid,balance,depositMet:paid>=depositDue-0.005&&total>0};
+  return {fb,other,roomFee,fbMin,shortfall,service,adminFee,tax,total,depositDue,paid,balance,depositMet:paid>=depositDue-0.005&&total>0};
 }
 
 function safeUrl(u){u=String(u||'').trim();return /^https:\/\//i.test(u)?u:''}

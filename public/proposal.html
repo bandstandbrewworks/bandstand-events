@@ -32,6 +32,7 @@ function totalsBlock(t,ev){
     ${t.other?`<span>Rentals, AV &amp; entertainment</span><span>${money(t.other)}</span>`:''}
     ${t.roomFee?`<span>Room fee</span><span>${money(t.roomFee)}</span>`:''}
     <span>Service charge (${num(ev.serviceRate)}%)</span><span>${money(t.service)}</span>
+    ${t.adminFee?`<span>Admin fee (${num(ev.adminFeeRate)}%)</span><span>${money(t.adminFee)}</span>`:''}
     <span>Sales tax (${num(ev.taxRate)}%)</span><span>${money(t.tax)}</span>
     <span class="t">Total</span><span class="t">${money(t.total)}</span>
     <span>Deposit due at signing (${num(ev.depositPct)}%)</span><span>${money(t.depositDue)}</span>

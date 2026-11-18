@@ -30,13 +30,13 @@ const DEFAULT_CONFIG={
     {id:'charc50',name:'Charcuterie Platter (50+ people)',category:'Food',unit:'each',price:400,desc:'Locally sourced cheeses, assorted fruits & pickled vegetables with crostini'},
     {id:'linen',name:'Linen package',category:'Rental / AV',unit:'flat',price:40,desc:'Linens for tables (included with Plan 3)'}
   ],
-  taxRate:7, serviceRate:22, depositPct:25, balanceDueDays:7, taxService:true,
+  taxRate:7, serviceRate:22, adminFeeRate:5, depositPct:25, balanceDueDays:7, taxService:true,
   defaultStart:'18:00', defaultEnd:'22:00', defaultGuests:50,
   staff:['Laurie','Darby','Adam'],
   eventTypes:['Private party','Corporate','Wedding / rehearsal','Birthday','Fundraiser','Holiday party','Ticketed show','Other'],
   sources:['Website form','Phone','Email','Walk-in','Repeat client','Referral','Social media'],
   lostReasons:['Date unavailable','Budget','Chose another venue','No response','Event cancelled','Group size'],
-  terms:"1. Deposit. A 25% deposit is due to book your event date.\n2. Final count. The final guest count is due 7 days before the event. You will be billed for the final count or actual attendance, whichever is higher.\n3. Room fee and minimums. A room fee may apply based on event date and size. If food and beverage spending is below the minimum for your space, the difference is charged as a room minimum fee.\n4. Service charge and tax. A service charge applies to food and beverage. Sales tax applies as required by law.\n5. Balance. The remaining balance is due before the event date shown on this proposal.\n6. Cancellation. With at least 14 days’ notice of cancellation, 50% of the deposit is refunded. With less than 14 days’ notice, the deposit is not refunded.\n7. Outside food and drink. No outside food or alcohol, except a celebration cake.\n8. Damages. The client is responsible for damage to the venue caused by guests or vendors they hire."
+  terms:"1. Deposit. A 25% deposit is due to book your event date.\n2. Final count. The final guest count is due 7 days before the event. You will be billed for the final count or actual attendance, whichever is higher.\n3. Room fee and minimums. A room fee may apply based on event date and size. If food and beverage spending is below the minimum for your space, the difference is charged as a room minimum fee.\n4. Service charge, admin fee and tax. A service charge and an administrative fee apply to food and beverage. Sales tax applies as required by law.\n5. Balance. The remaining balance is due before the event date shown on this proposal.\n6. Cancellation. With at least 14 days’ notice of cancellation, 50% of the deposit is refunded. With less than 14 days’ notice, the deposit is not refunded.\n7. Outside food and drink. No outside food or alcohol, except a celebration cake.\n8. Damages. The client is responsible for damage to the venue caused by guests or vendors they hire."
 };
 
 /* ---------- state ---------- */
@@ -127,7 +127,7 @@ function newEvent(partial){
     id:uid(),status:'Lead',source:c.sources[1]||'Phone',createdAt:n,updatedAt:n,title:'New inquiry',type:c.eventTypes[0]||'',
     date:'',start:c.defaultStart||'18:00',end:c.defaultEnd||'22:00',spaceIds:[],guests:num(c.defaultGuests)||50,owner:c.staff[0]||'',followUp:addDays(todayISO(),2),lostReason:'',notes:'',
     client:{name:'',email:'',phone:'',company:''},items:[],roomFee:0,fbMinimum:0,
-    serviceRate:c.serviceRate,taxRate:c.taxRate,depositPct:c.depositPct,taxService:!!c.taxService,
+    serviceRate:c.serviceRate,adminFeeRate:num(c.adminFeeRate),taxRate:c.taxRate,depositPct:c.depositPct,taxService:!!c.taxService,
     beo:{timeline:[],setup:'',music:'',bar:'',kitchen:'',staffing:'',allergies:''},
     contract:{sentAt:'',signedAt:'',signedName:''},toast:{invoiceNumber:'',invoiceUrl:''},payments:[],activity:[]
   },partial||{});
@@ -139,7 +139,9 @@ function toastInvoiceText(ev,t){
   (ev.items||[]).forEach(i=>L.push(`  ${num(i.qty)} × ${i.name} @ ${money(i.price)} ${i.unit} = ${money(num(i.qty)*num(i.price))}${i.desc?'\n      '+i.desc:''}`));
   if(t.shortfall)L.push(`  1 × F&B minimum shortfall @ ${money(t.shortfall)}`);
   if(t.roomFee)L.push(`  1 × Room fee (${(ev.spaceIds||[]).map(spaceName).join(', ')}) @ ${money(t.roomFee)}`);
-  L.push(`  Service charge ${num(ev.serviceRate)}% = ${money(t.service)}`,'',`Total ${money(t.total)}`,`Deposit request: ${money(t.depositDue)} (${num(ev.depositPct)}%)`,`Due date for balance: ${fmtDate(balanceDueDate(ev))}`);
+  L.push(`  Service charge ${num(ev.serviceRate)}% = ${money(t.service)}`);
+  if(t.adminFee)L.push(`  Admin fee ${num(ev.adminFeeRate)}% = ${money(t.adminFee)}`);
+  L.push('',`Total ${money(t.total)}`,`Deposit request: ${money(t.depositDue)} (${num(ev.depositPct)}%)`,`Due date for balance: ${fmtDate(balanceDueDate(ev))}`);
   return L.join('\n');
 }
 function setStatus(ev,s){ if(ev.status===s) return; logAct(ev,'Status changed: '+ev.status+' → '+s); ev.status=s; if(s==='Lost'&&!ev.lostReason) ev.lostReason=''; }
@@ -569,6 +571,7 @@ function totalsBlock(t,ev){
     ${t.other?`<span>Rentals, AV &amp; entertainment</span><span>${money(t.other)}</span>`:''}
     ${t.roomFee?`<span>Room fee</span><span>${money(t.roomFee)}</span>`:''}
     <span>Service charge (${num(ev.serviceRate)}%)</span><span>${money(t.service)}</span>
+    ${t.adminFee?`<span>Admin fee (${num(ev.adminFeeRate)}%)</span><span>${money(t.adminFee)}</span>`:''}
     <span>Sales tax (${num(ev.taxRate)}%)</span><span>${money(t.tax)}</span>
     <span class="t">Total</span><span class="t">${money(t.total)}</span>
     <span>Deposit due at signing (${num(ev.depositPct)}%)</span><span>${money(t.depositDue)}</span>
@@ -591,8 +594,8 @@ function tabProposal(ev,t){
   </div>
   <div class="grid2" style="margin-top:16px">
     <div class="panel"><div class="row between" style="margin-bottom:12px"><h3>Pricing terms</h3><button class="btn sm" data-act="space-pricing" ${ro}>Use space pricing</button></div><div class="fields">
-      ${inp(ev,'Room fee ($)','roomFee','number')}${inp(ev,'F&amp;B minimum ($)','fbMinimum','number')}${inp(ev,'Service charge (%)','serviceRate','number')}${inp(ev,'Sales tax (%)','taxRate','number')}${inp(ev,'Deposit (%)','depositPct','number')}
-      <div class="f"><span class="lbl">Tax on service charge</span><label class="check" for="f-taxService"><input type="checkbox" id="f-taxService" data-bind="taxService" data-type="bool" ${ev.taxService?'checked':''} ${ro}> Taxable</label></div>
+      ${inp(ev,'Room fee ($)','roomFee','number')}${inp(ev,'F&amp;B minimum ($)','fbMinimum','number')}${inp(ev,'Service charge (%)','serviceRate','number')}${inp(ev,'Admin fee (%)','adminFeeRate','number')}${inp(ev,'Sales tax (%)','taxRate','number')}${inp(ev,'Deposit (%)','depositPct','number')}
+      <div class="f"><span class="lbl">Tax on service charge &amp; admin fee</span><label class="check" for="f-taxService"><input type="checkbox" id="f-taxService" data-bind="taxService" data-type="bool" ${ev.taxService?'checked':''} ${ro}> Taxable</label></div>
     </div><p class="muted" style="font-size:12px;margin:12px 0 0">The F&amp;B minimum counts only Food and Beverage lines. If spending is short, the difference is added as a room minimum fee.</p></div>
     <div class="panel"><h3>Totals</h3>${totalsBlock(t,ev)}</div>
   </div>`;
@@ -751,13 +754,14 @@ function renderSettings(){
     <div class="f wide"><span class="lbl">Logo (shown on the sidebar, inquiry form, proposals and BEOs)</span><div class="row"><span class="logo-prev">${/^data:image\//.test(d.logo||'')?`<img src="${d.logo}" alt="Logo preview">`:'<span class="muted">No logo yet</span>'}</span><label class="btn" for="s-logo-file" style="color:var(--ink)">Upload logo…</label><input type="file" id="s-logo-file" data-logo accept="image/png,image/jpeg,image/webp,image/svg+xml" style="display:none" ${ro}>${d.logo?`<button class="btn danger" data-act="s-del-logo" ${ro}>Remove</button>`:''}</div><span class="muted" style="font-size:12px">PNG with a transparent background works best. Then click Save settings.</span></div>
     <div class="f"><label for="s-taxRate">Sales tax (%)</label>${sIn('taxRate','number')}</div>
     <div class="f"><label for="s-serviceRate">Service charge (%)</label>${sIn('serviceRate','number')}</div>
+    <div class="f"><label for="s-adminFeeRate">Admin fee (%)</label>${sIn('adminFeeRate','number')}</div>
     <div class="f"><label for="s-depositPct">Deposit (%)</label>${sIn('depositPct','number')}</div>
     <div class="f"><label for="s-balanceDueDays">Balance due (days before)</label>${sIn('balanceDueDays','number')}</div>
     <div class="f"><label for="s-defaultStart">Default start time</label>${sIn('defaultStart','time')}</div>
     <div class="f"><label for="s-defaultEnd">Default end time</label>${sIn('defaultEnd','time')}</div>
     <div class="f"><label for="s-defaultGuests">Default guest count</label>${sIn('defaultGuests','number')}</div>
     <div class="f wide"><span class="muted" style="font-size:12px">The three defaults above fill in new events and the website inquiry form. Guests can still change them on the form.</span></div>
-    <div class="f"><span class="lbl">Service charge</span><label class="check" for="s-taxService"><input type="checkbox" id="s-taxService" data-sbind="taxService" data-type="bool" ${d.taxService?'checked':''} ${ro}> Is taxable</label></div>
+    <div class="f"><span class="lbl">Service charge &amp; admin fee</span><label class="check" for="s-taxService"><input type="checkbox" id="s-taxService" data-sbind="taxService" data-type="bool" ${d.taxService?'checked':''} ${ro}> Is taxable</label></div>
   </div></div>
   <div class="panel" style="margin-bottom:16px"><div class="row between" style="margin-bottom:10px"><h3>Spaces</h3><button class="btn sm" data-act="s-add-space" ${ro}>Add space</button></div>
     <div class="tbl-wrap"><table><thead><tr><th>Name</th><th class="num">Seated</th><th class="num">Standing</th><th class="num">Room fee</th><th class="num">F&amp;B min</th><th>Blocks all spaces</th><th></th></tr></thead><tbody>
