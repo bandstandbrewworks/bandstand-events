@@ -222,3 +222,5 @@ body.public-page{background:var(--bg);display:block;height:auto;min-height:100%}
 .lead-tag{font-style:normal;font-size:9.5px;letter-spacing:.04em;text-transform:uppercase;background:var(--sc);color:#fff;border-radius:3px;padding:0 4px;margin-right:2px}
 .q-tag{font-style:normal;font-size:9.5px;background:var(--s-prop);color:#1b1b1b;border-radius:3px;padding:0 4px}
 .day.has-req{box-shadow:inset 0 0 0 2px var(--s-prop)}
+tr.sec-head th{background:var(--surface-2);font-family:'Barlow Condensed',sans-serif;font-size:17px;letter-spacing:.03em;text-transform:uppercase;color:var(--ink);padding:14px 10px 8px;border-top:2px solid var(--ink)}
+tr.sec-head th .muted{font-family:'IBM Plex Sans',sans-serif;font-size:12px;text-transform:none;letter-spacing:0;font-weight:400}
