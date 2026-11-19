@@ -57,7 +57,8 @@ function beoEmail(ev, cfg, hours, C) {
     const t = C.totals(ev);
     L.push('', 'MONEY', `  Est. total ${C.money(t.total)} · Paid ${C.money(t.paid)} · Balance ${C.money(t.balance)}`);
   } catch (e) { /* totals are a nice-to-have */ }
-  L.push('', `Open the event: ${APP_URL}/#event-${ev.id}`);
+  if (ev.beoToken) L.push('', `BEO page (always the latest): ${APP_URL}/beo?t=${ev.beoToken}`);
+  L.push(`Open the event (staff login): ${APP_URL}/#event-${ev.id}`);
   const subject = `${hours ? 'Event in ' + hours + ' hrs' : 'BEO'}: ${ev.title || 'Event'} — ${C.fmtShort(ev.date)}${ev.start ? ' ' + C.fmtTime(ev.start) : ''}`;
   return { subject, text: L.join('\n') };
 }
@@ -108,7 +109,7 @@ module.exports = async (req, res) => {
       const m = await pickMailer();
       const out = [];
       for (const row of evs) {
-        const ev = Object.assign({}, row.data, { id: row.id });
+        const ev = Object.assign({}, row.data, { id: row.id, beoToken: row.beo_token });
         let r;
         if (!m) r = { lines: ['BEO reminder not sent: email sending is not set up yet.'], failed: true };
         else r = await sendBeo(ev, cfg, cfg.beoReminderHours || 36, m).catch(e => ({ lines: ['BEO reminder failed: ' + e.message], failed: true }));
@@ -127,14 +128,14 @@ module.exports = async (req, res) => {
     const id = String(body.id || '');
     if (!/^[A-Za-z0-9_-]{1,64}$/.test(id)) return res.status(400).json({ error: 'Bad id' });
     const [rows, st] = await Promise.all([
-      rest(`private_events?id=eq.${encodeURIComponent(id)}&select=id,data`, token),
+      rest(`private_events?id=eq.${encodeURIComponent(id)}&select=id,data,beo_token`, token),
       rest('private_event_settings?id=eq.main&select=data', token)
     ]);
     if (!rows || !rows.length) return res.status(404).json({ error: 'Event not found' });
     const cfg = (st && st[0] && st[0].data) || {};
     const m = await pickMailer();
     if (!m) return res.status(400).json({ error: 'Email sending is not set up yet' });
-    const r = await sendBeo(Object.assign({}, rows[0].data, { id }), cfg, 0, m);
+    const r = await sendBeo(Object.assign({}, rows[0].data, { id, beoToken: rows[0].beo_token }), cfg, 0, m);
     if (secret) await rpc('pe_beo_done', { p_id: id, p_secret: secret, p_status: null, p_lines: r.lines }).catch(() => {});
     return res.status(r.failed ? 502 : 200).json({ ok: !r.failed, lines: r.lines });
   } catch (e) {

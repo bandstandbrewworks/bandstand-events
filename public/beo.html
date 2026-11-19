@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>BEO · Bandstand Brew Works</title>
+<link rel="icon" href="/logo.webp">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body class="public-page">
+<div class="public-wrap" style="max-width:940px"><div id="root" class="sheet"><p class="muted">Loading the BEO…</p></div></div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.49.0/dist/umd/supabase.js"></script>
+<script src="/config.js"></script>
+<script src="/core.js"></script>
+<script>
+const root=document.getElementById('root');
+const token=new URLSearchParams(location.search).get('t')||'';
+const block=(h,v)=>v?`<section><h3>${h}</h3><div style="white-space:pre-line">${esc(v)}</div></section>`:'';
+function render(P){
+  if(!P){root.innerHTML='<h2>BEO not found</h2><p class="muted">This link may be mistyped, or the event was cancelled.</p>';return;}
+  const ev=P.event,cfg=P.settings,b=ev.beo||{},c=ev.client||{};
+  const lead=ev.status==='Lead'||ev.status==='Proposal Sent';
+  document.title=`BEO: ${ev.title||'Event'} · ${cfg.venueName}`;
+  const tl=(b.timeline||[]).filter(r=>r&&(r.time||r.desc));
+  root.innerHTML=`
+  <div class="sheet-head"><div><img class="doc-logo" src="${logoUrl(cfg)}" alt="${esc(cfg.venueName)}"><div class="tagline">${esc(cfg.tagline)}</div><div class="muted">Banquet Event Order</div></div>
+    <div style="text-align:right"><b>${esc(ev.title||'')}</b><div><span class="pill ${sc(ev.status)}">${esc(ev.status||'')}</span></div></div></div>
+  ${lead?'<p class="flag warn" style="display:inline-block">Lead only: this date is not booked yet.</p>':''}
+  <div class="kv"><div><span>Date</span>${esc(fmtDate(ev.date,true))}</div><div><span>Time</span>${esc(fmtTime(ev.start))}–${esc(fmtTime(ev.end))}</div><div><span>Guests</span>${num(ev.guests)}</div><div><span>Space</span>${esc((ev.spaceNames||[]).join(', ')||'—')}</div><div><span>Type</span>${esc(ev.type||'—')}</div><div><span>Event manager</span>${esc(ev.owner||'—')}</div><div><span>Client</span>${esc([c.name,c.company].filter(Boolean).join(', ')||'—')}</div></div>
+  <section><h3>Timeline</h3>${tl.length?`<table><tbody>${tl.map(r=>`<tr><td style="width:110px"><b>${esc(fmtTime(r.time))}</b></td><td>${esc(r.desc||'')}</td></tr>`).join('')}</tbody></table>`:'<p class="muted">No timeline yet.</p>'}</section>
+  <section><h3>Food &amp; beverage</h3>${(ev.items||[]).length?`<table><tbody>${ev.items.map(i=>`<tr><td class="num" style="width:60px">${num(i.qty)}</td><td>${esc(i.name)}${i.desc?`<div class="muted" style="font-size:12px;white-space:pre-line">${esc(i.desc)}</div>`:''}</td><td class="muted" style="width:120px">${esc(i.category||'')}</td></tr>`).join('')}</tbody></table>`:'<p class="muted">No menu items yet.</p>'}</section>
+  ${block('Setup / floor plan',b.setup)}${block('Music / stage / AV',b.music)}${block('Bar',b.bar)}${block('Kitchen',b.kitchen)}${block('Allergies &amp; dietary',b.allergies)}${block('Staffing',b.staffing)}
+  <p class="muted no-print" style="font-size:12px;margin-top:18px">Always the latest version${ev.updatedAt?` · last updated ${esc(fmtTS(ev.updatedAt))}`:''}. <button class="link" onclick="print()">Print</button></p>`;
+}
+(async()=>{
+  const sb=supa();
+  if(!sb||!/^[0-9a-f-]{36}$/i.test(token)){render(null);return;}
+  const {data,error}=await sb.rpc('pe_get_beo',{p_token:token});
+  render(error?null:data);
+})();
+</script>
+</body>
+</html>

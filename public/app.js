@@ -108,7 +108,7 @@ function persistEvent(ev){
   ev.updatedAt=new Date().toISOString();
   S.events.set(ev.id,ev);
   const body=clone(ev);delete body.id;
-  queueWrite('ev:'+ev.id,()=>sb.from('private_events').upsert({id:ev.id,data:body}).select('client_token').single().then(r=>{if(r.data&&r.data.client_token){S.tokens[ev.id]=r.data.client_token;}return r}));
+  queueWrite('ev:'+ev.id,()=>sb.from('private_events').upsert({id:ev.id,data:body}).select('client_token,beo_token').single().then(r=>{if(r.data&&r.data.client_token){S.tokens[ev.id]=r.data.client_token;}if(r.data&&r.data.beo_token)(S.beoTokens=S.beoTokens||{})[ev.id]=r.data.beo_token;return r}));
 }
 function removeEvent(id){
   S.events.delete(id);
@@ -118,6 +118,7 @@ function persistConfig(cfg){
   S.config=cfg;
   queueWrite('config',()=>sb.from('private_event_settings').upsert({id:'main',data:clone(cfg)}));
 }
+function beoLink(id){const t=(S.beoTokens||{})[id];return t?location.origin+'/beo?t='+t:''}
 function clientLink(id){const t=S.tokens[id];return t?location.origin+'/proposal?t='+t:''}
 function staffName(by){if(!by)return 'Website / client';const s=String(by);if(!s.includes('@'))return 'Team member';const n=s.split('@')[0].split(/[._-]/)[0];return n.charAt(0).toUpperCase()+n.slice(1)}
 function logAct(ev,text){ev.activity=ev.activity||[];ev.activity.unshift({at:new Date().toISOString(),by:S.email||null,text});if(ev.activity.length>200)ev.activity.length=200}
@@ -672,7 +673,7 @@ function tabBEO(ev,t){
   const fb=(ev.items||[]);
   return `<div class="row between" style="margin-bottom:12px"><p class="muted" style="margin:0">The BEO is the run sheet for the kitchen, bar and stage crew. Edit it here; it uses the proposal's menu automatically.</p>
     <div class="row"><button class="btn" data-act="tl-template" ${ro}>Fill standard timeline</button><button class="btn" data-act="email-beo" ${S.beoSending?'disabled':''}>${S.beoSending?'Sending…':'Email BEO to team'}</button><button class="btn primary" data-act="copy-beo">Copy BEO as text</button></div></div>
-  ${ev.beoReminder&&ev.beoReminder.status==='sent'?`<p class="muted" style="margin:-4px 0 12px;font-size:12px">Automatic reminder sent ${esc(fmtTS(ev.beoReminder.at))}.</p>`:''}
+  <p class="muted" style="margin:-4px 0 12px;font-size:12px">${beoLink(ev.id)?`Team BEO page (read-only, no prices; linked in the Google Calendar): <a href="${esc(beoLink(ev.id))}" target="_blank" rel="noopener">open</a> · <button class="link" data-act="copy-beo-link">copy link</button>`:'Team BEO page link appears after the event is saved.'}${ev.beoReminder&&ev.beoReminder.status==='sent'?` · Automatic reminder sent ${esc(fmtTS(ev.beoReminder.at))}.`:''}</p>
   ${S.beoText!=null?`<div class="panel" style="margin-bottom:12px"><label for="beo-text">Copy didn’t work here. Select all and copy:</label><textarea id="beo-text" readonly style="min-height:200px;font-family:ui-monospace,monospace;font-size:12px">${esc(S.beoText)}</textarea></div>`:''}
   <div class="sheet">
     <div class="sheet-head"><div>${docBrand('Banquet Event Order')}</div><div style="text-align:right"><b>${esc(ev.title)}</b><div><span class="pill ${sc(ev.status)}">${ev.status}</span></div></div></div>
@@ -937,6 +938,7 @@ document.addEventListener('click',e=>{
     case 'mail-test':sendTestMail();break;
     case 'cal-leads':S.calLeads=el.checked;render();break;
     case 'email-beo':emailBeo(S.eventId);break;
+    case 'copy-beo-link':{const l=beoLink(S.eventId);if(l&&navigator.clipboard)navigator.clipboard.writeText(l).then(()=>toast('BEO link copied'),()=>toast(l));else toast(l);break;}
     case 'gmail-connect':gmailConnect();break;
     case 'gmail-disconnect':gmailDisconnect();break;
     case 'notif-on':if('Notification' in window)Notification.requestPermission().then(()=>render());break;
@@ -1061,9 +1063,9 @@ function renderAuth(){
     <p class="muted" style="font-size:12px;margin:0">Forgot your password? Reset it from the memberships app’s sign-in page.</p></form>`);
 }
 function mergeConfig(d){const c=Object.assign(clone(DEFAULT_CONFIG),d||{});['spaces','catalog','staff','eventTypes','sources','lostReasons'].forEach(k=>{if(!Array.isArray(c[k]))c[k]=clone(DEFAULT_CONFIG[k])});return c}
-function rowToEvent(r){S.tokens[r.id]=r.client_token;return Object.assign(clone(r.data||{}),{id:r.id})}
+function rowToEvent(r){S.tokens[r.id]=r.client_token;if(r.beo_token)(S.beoTokens=S.beoTokens||{})[r.id]=r.beo_token;return Object.assign(clone(r.data||{}),{id:r.id})}
 async function loadAll(){
-  const [ev,st]=await Promise.all([sb.from('private_events').select('id,data,client_token'),sb.from('private_event_settings').select('data').eq('id','main').maybeSingle()]);
+  const [ev,st]=await Promise.all([sb.from('private_events').select('id,data,client_token,beo_token'),sb.from('private_event_settings').select('data').eq('id','main').maybeSingle()]);
   if(ev.error){S.dbError=ev.error.message;S.loaded=true;render();return;}
   const m=new Map();(ev.data||[]).forEach(r=>m.set(r.id,rowToEvent(r)));S.events=m;
   if(st.data&&st.data.data&&Object.keys(st.data.data).length)S.config=mergeConfig(st.data.data);
