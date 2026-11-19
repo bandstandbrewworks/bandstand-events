@@ -266,7 +266,7 @@ function card(e){
   const t=totals(e), conf=conflicts(e).some(c=>c.hold);
   const due=e.followUp&&ACTIVE.includes(e.status)&&e.status!=='Definite'&&e.followUp<=todayISO();
   return `<article class="card ${sc(e.status)}" draggable="true" data-drag="${esc(e.id)}" data-act="open-event" data-id="${esc(e.id)}" tabindex="0" role="button" aria-label="Open ${esc(e.title)}">
-    <div class="row between"><span class="meta">${esc(fmtShort(e.date))}${e.start?' · '+esc(fmtTime(e.start)):''}</span><span>${isNewLead(e)?'<span class="flag ok">New</span> ':''}${conf?'<span class="flag">Conflict</span>':''}</span></div>
+    <div class="row between"><span class="meta">${esc(fmtShort(e.date))}${e.start?' · '+esc(fmtTime(e.start)):''}</span><span>${isNewLead(e)?'<span class="flag ok">New</span> ':''}${conf?'<span class="flag">Conflict</span>':(()=>{const p=queuePos(e);return p===1?'<span class="flag ok">1st right</span>':p>1?`<span class="flag warn">${ordinal(p)} in line</span>`:''})()}</span></div>
     <h4>${esc(e.title||'Untitled event')}</h4>
     <div class="meta">${esc(e.client&&e.client.name||'No contact yet')} · ${num(e.guests)} guests</div>
     ${(e.spaceIds||[]).length?`<div class="chips">${e.spaceIds.map(id=>`<span class="chip">${esc(spaceName(id))}</span>`).join('')}</div>`:''}
@@ -295,32 +295,47 @@ function renderPipeline(){
 }
 
 /* ---------- calendar ---------- */
+/* First right of refusal: among events wanting the same space and time, a booked
+   (Tentative/Definite) event comes first; otherwise the earliest inquiry does. */
+function inquiredOn(e){return (e.inquiredAt||String(e.createdAt||'').slice(0,10)||'')}
+const isHoldOnly=e=>e.status==='Lead'||e.status==='Proposal Sent';
+function requestQueue(ev){
+  const c=conflicts(ev); if(!c.length) return [];
+  return [ev,...c.map(x=>x.ev)].sort((a,b)=>(BLOCKING.includes(b.status)-BLOCKING.includes(a.status))||inquiredOn(a).localeCompare(inquiredOn(b))||String(a.createdAt||'').localeCompare(String(b.createdAt||''))||a.id.localeCompare(b.id));
+}
+function queuePos(ev){const q=requestQueue(ev);return q.length?q.findIndex(e=>e.id===ev.id)+1:0}
+function ordinal(n){return n+(['th','st','nd','rd'][(n%100-20)%10]||['th','st','nd','rd'][n%100]||'th')}
+
 function renderCalendar(){
   const m=S.calMonth, y=m.getFullYear(), mo=m.getMonth();
   const start=new Date(y,mo,1); start.setDate(1-start.getDay());
   const end=new Date(y,mo+1,0); end.setDate(end.getDate()+(6-end.getDay()));
   const today=todayISO();
-  const evs=evList().filter(e=>e.date&&e.status!=='Lost'&&(S.calSpace==='all'||(e.spaceIds||[]).includes(S.calSpace)||(e.spaceIds||[]).some(id=>{const s=spaceById(id);return s&&s.buyout})));
+  const showLeads=S.calLeads!==false;
+  const evs=evList().filter(e=>e.date&&e.status!=='Lost'&&(showLeads||!isHoldOnly(e))&&(S.calSpace==='all'||(e.spaceIds||[]).includes(S.calSpace)||(e.spaceIds||[]).some(id=>{const s=spaceById(id);return s&&s.buyout})));
   const byDay={}; evs.forEach(e=>{(byDay[e.date]=byDay[e.date]||[]).push(e)});
   let cells='';
   for(let d=new Date(start);d<=end;d.setDate(d.getDate()+1)){
     const iso=isoOf(d), list=(byDay[iso]||[]).sort(byDate);
     const hasConf=list.some(e=>conflicts(e).some(c=>c.hard||(c.hold&&BLOCKING.includes(e.status))));
-    cells+=`<div class="day ${d.getMonth()!==mo?'out':''} ${iso===today?'today':''} ${hasConf?'has-conf':''}" data-act="cal-new" data-date="${iso}" title="${hasConf?'Double-booked: two holds overlap in the same space':'Add event on '+esc(fmtShort(iso))}">
+    const hasReq=!hasConf&&list.some(e=>conflicts(e).length);
+    cells+=`<div class="day ${d.getMonth()!==mo?'out':''} ${iso===today?'today':''} ${hasConf?'has-conf':hasReq?'has-req':''}" data-act="cal-new" data-date="${iso}" title="${hasConf?'Double-booked: two holds overlap in the same space':hasReq?'More than one request for the same space. The earliest inquiry has first right of refusal.':'Add event on '+esc(fmtShort(iso))}">
       <span class="dn">${d.getDate()}</span>
-      ${list.slice(0,4).map(e=>`<button class="ev-chip ${sc(e.status)}" data-act="open-event" data-id="${esc(e.id)}" title="${esc(e.status+': '+e.title+' · '+(e.spaceIds||[]).map(spaceName).join(', '))}">${esc(fmtTime(e.start).replace(':00','').replace(' ',''))} ${esc(e.title)}</button>`).join('')}
+      ${list.slice(0,4).map(e=>{const lead=isHoldOnly(e),pos=queuePos(e);return `<button class="ev-chip ${sc(e.status)} ${lead?'lead-hold':''}" data-act="open-event" data-id="${esc(e.id)}" title="${esc((lead?'LEAD ONLY (not booked) · '+e.status:e.status)+': '+e.title+' · '+(e.spaceIds||[]).map(spaceName).join(', ')+(pos?' · '+ordinal(pos)+' request for this space/time':''))}">${lead?'<b class="lead-tag">Lead</b> ':''}${pos>1?`<b class="q-tag">${ordinal(pos)}</b> `:''}${esc(fmtTime(e.start).replace(':00','').replace(' ',''))} ${esc(e.title)}</button>`}).join('')}
       ${list.length>4?`<span class="muted" style="font-size:11px">+${list.length-4} more</span>`:''}
     </div>`;
   }
   const monthEvs=evList().filter(e=>e.date&&e.date.startsWith(y+'-'+pad(mo+1)));
   const clashes=[]; const seen=new Set();
-  monthEvs.forEach(e=>conflicts(e).forEach(c=>{if(!c.hold)return;const k=[e.id,c.ev.id].sort().join('|');if(seen.has(k))return;seen.add(k);clashes.push([e,c.ev])}));
+  monthEvs.forEach(e=>conflicts(e).forEach(c=>{const k=[e.id,c.ev.id].sort().join('|');if(seen.has(k))return;seen.add(k);const q=requestQueue(e);const [a,b]=q.indexOf(e)<q.indexOf(c.ev)?[e,c.ev]:[c.ev,e];clashes.push([a,b])}));
+  clashes.sort((x,y)=>byDate(x[0],y[0]));
   return `${staleBanner()}<div class="page-head"><div><h1>${m.toLocaleDateString('en-US',{month:'long',year:'numeric'})}</h1><p>Click an empty part of a day to start an event on that date.</p></div>
     <div class="row"><label for="cal-space" class="lbl">Space</label><select id="cal-space" data-ui="calSpace" style="width:auto"><option value="all">All spaces</option>${S.config.spaces.map(s=>`<option value="${esc(s.id)}" ${S.calSpace===s.id?'selected':''}>${esc(s.name)}</option>`).join('')}</select>
     <button class="btn" data-act="cal-move" data-n="-1" aria-label="Previous month">‹ Prev</button><button class="btn" data-act="cal-today">Today</button><button class="btn" data-act="cal-move" data-n="1" aria-label="Next month">Next ›</button></div></div>
-  <div class="legend" style="margin-bottom:10px">${STATUSES.filter(s=>s!=='Lost').map(s=>`<span class="pill ${sc(s)}">${s}</span>`).join('')}<span class="flag">Red outline = double-booked</span></div>
+  <div class="row between" style="margin-bottom:10px;flex-wrap:wrap;gap:8px"><div class="legend">${STATUSES.filter(s=>s!=='Lost').map(s=>`<span class="pill ${sc(s)}">${s}</span>`).join('')}<span class="ev-chip lead-hold s-lead" style="display:inline-block;width:auto"><b class="lead-tag">Lead</b> Not booked: date held for the inquiry</span><span class="flag">Red outline = double-booked</span><span class="flag warn">Gold outline = competing requests</span></div>
+    <label class="check" for="cal-leads"><input type="checkbox" id="cal-leads" data-act="cal-leads" ${showLeads?'checked':''}> Show leads</label></div>
   <div class="cal">${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>`<div class="dow">${d}</div>`).join('')}${cells}</div>
-  <div class="panel" style="margin-top:16px"><h3>Space conflicts this month</h3>${clashes.length?`<div class="tbl-wrap"><table><thead><tr><th>Date</th><th>Event</th><th>Overlaps with</th><th>Shared space</th></tr></thead><tbody>${clashes.map(([a,b])=>`<tr><td>${esc(fmtShort(a.date))}</td><td><button class="link" data-act="open-event" data-id="${esc(a.id)}">${esc(a.title)}</button> <span class="pill ${sc(a.status)}">${a.status}</span></td><td><button class="link" data-act="open-event" data-id="${esc(b.id)}">${esc(b.title)}</button> <span class="pill ${sc(b.status)}">${b.status}</span></td><td>${esc([...new Set([...(a.spaceIds||[]),...(b.spaceIds||[])])].map(spaceName).join(', '))}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted" style="margin:0">No overlapping holds this month.</p>'}</div>`;
+  <div class="panel" style="margin-top:16px"><h3>Conflicts &amp; competing requests this month</h3>${clashes.length?`<p class="muted" style="margin-top:0;font-size:13px">“First right” is the booked event, or if neither is booked, whoever inquired first. Offer them the date before committing it to the other request.</p><div class="tbl-wrap"><table><thead><tr><th>Date</th><th>First right</th><th>Also wants it</th><th>Shared space</th></tr></thead><tbody>${clashes.map(([a,b])=>`<tr><td>${esc(fmtShort(a.date))}</td><td><button class="link" data-act="open-event" data-id="${esc(a.id)}">${esc(a.title)}</button> <span class="pill ${sc(a.status)}">${a.status}</span><div class="muted" style="font-size:12px">Inquired ${esc(fmtShort(inquiredOn(a)))}</div></td><td><button class="link" data-act="open-event" data-id="${esc(b.id)}">${esc(b.title)}</button> <span class="pill ${sc(b.status)}">${b.status}</span><div class="muted" style="font-size:12px">Inquired ${esc(fmtShort(inquiredOn(b)))}</div></td><td>${esc([...new Set([...(a.spaceIds||[]),...(b.spaceIds||[])])].map(spaceName).join(', '))}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted" style="margin:0">No overlapping events or requests this month.</p>'}</div>`;
 }
 
 /* ---------- all events ---------- */
@@ -537,8 +552,12 @@ function renderDetail(){
   const tabs=[['details','Details'],['proposal','Proposal'],['beo','BEO'],['contract','Contract & payments'],['client','Client view'],['activity','Activity']];
   let banner='';
   if(conf.length){
-    const hard=conf.filter(c=>c.hold);
-    banner=`<div class="banner ${hard.length?'bad':'warn'}"><b>${hard.length?'Space is already held':'Another inquiry wants this space'}</b> on ${esc(fmtShort(ev.date))}:<ul>${conf.map(c=>`<li><button class="link" data-act="open-event" data-id="${esc(c.ev.id)}">${esc(c.ev.title)}</button> · ${esc(c.ev.status)} · ${esc(fmtTime(c.ev.start))}–${esc(fmtTime(c.ev.end))} · ${esc((c.ev.spaceIds||[]).map(spaceName).join(', '))}</li>`).join('')}</ul></div>`;
+    const hard=conf.filter(c=>c.hold), q=requestQueue(ev), pos=q.findIndex(e=>e.id===ev.id)+1, first=q[0];
+    const who=e=>esc((e.client&&e.client.name)||e.title);
+    const rofr=pos===1
+      ? (isHoldOnly(ev)?`<p style="margin:6px 0 0"><b>This inquiry has first right of refusal</b> (inquired ${esc(fmtShort(inquiredOn(ev)))}). Check with ${who(ev)} to book or release the date before offering it to the later request.</p>`:'')
+      : `<p style="margin:6px 0 0"><b>${ordinal(pos)} in line.</b> ${who(first)} ${BLOCKING.includes(first.status)?'has this space booked':`inquired first (${esc(fmtShort(inquiredOn(first)))}) and has first right of refusal`}. ${BLOCKING.includes(first.status)?'':'Offer them the date before booking this one.'}</p>`;
+    banner=`<div class="banner ${hard.length?'bad':'warn'}"><b>${hard.length?'Space is already held':'Another inquiry wants this space'}</b> on ${esc(fmtShort(ev.date))}:<ul>${q.filter(e=>e.id!==ev.id).map(c=>`<li><button class="link" data-act="open-event" data-id="${esc(c.id)}">${esc(c.title)}</button> · ${esc(c.status)}${isHoldOnly(c)?' (lead only)':''} · inquired ${esc(fmtShort(inquiredOn(c)))} · ${esc(fmtTime(c.start))}–${esc(fmtTime(c.end))} · ${esc((c.spaceIds||[]).map(spaceName).join(', '))}</li>`).join('')}</ul>${rofr}</div>`;
   }
   const cap=capacity(ev);
   if(cap&&num(ev.guests)>cap.standing) banner+=`<div class="banner warn">${num(ev.guests)} guests is over the standing capacity of the selected space (${cap.standing}).</div>`;
@@ -570,6 +589,7 @@ function tabDetails(ev,cap){
     ${inp(ev,'Event name','title','text',{wide:true})}${sel(ev,'Event type','type',c.eventTypes)}${inp(ev,'Guests','guests','number')}
     ${inp(ev,'Date','date','date')}${inp(ev,'Start','start','time')}${inp(ev,'End','end','time')}
     ${sel(ev,'Lead source','source',c.sources)}${sel(ev,'Event manager','owner',c.staff,'Unassigned')}${inp(ev,'Next follow-up','followUp','date')}
+    <div class="f"><label for="f-inquiredAt">Inquiry date</label><input id="f-inquiredAt" type="date" data-bind="inquiredAt" value="${esc(inquiredOn(ev))}" ${S.readOnly?'disabled':''}><span class="muted" style="font-size:12px">Decides first right of refusal</span></div>
     ${ev.status==='Lost'?sel(ev,'Lost reason','lostReason',c.lostReasons,'Choose a reason'):''}
   </div></div>
   </div>
@@ -915,6 +935,7 @@ document.addEventListener('click',e=>{
   switch(act){
     case 'nav':go(el.dataset.view);break;
     case 'mail-test':sendTestMail();break;
+    case 'cal-leads':S.calLeads=el.checked;render();break;
     case 'email-beo':emailBeo(S.eventId);break;
     case 'gmail-connect':gmailConnect();break;
     case 'gmail-disconnect':gmailDisconnect();break;

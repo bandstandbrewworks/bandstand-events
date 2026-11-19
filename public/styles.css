@@ -218,3 +218,7 @@ body.public-page{background:var(--bg);display:block;height:auto;min-height:100%}
 .pick-preview div{color:var(--muted);margin-top:2px;white-space:pre-line}
 .newpill{display:inline-block;font-size:10px;font-weight:700;padding:1px 6px;border-radius:9px;background:var(--gold,#c9a227);color:#1b1b1b;margin-left:4px;vertical-align:1px}
 .lead-alert{position:fixed;top:16px;right:16px;z-index:20;max-width:360px;background:var(--surface,#fff);color:var(--ink);border:1px solid var(--line);border-left:4px solid var(--gold,#c9a227);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.18);padding:12px 14px;display:flex;flex-direction:column;gap:10px;font-size:13px}
+.ev-chip.lead-hold{background:repeating-linear-gradient(135deg,var(--surface-2) 0 6px,var(--surface) 6px 12px);border:1px dashed var(--sc);border-left:3px dashed var(--sc);font-style:italic;color:var(--muted)}
+.lead-tag{font-style:normal;font-size:9.5px;letter-spacing:.04em;text-transform:uppercase;background:var(--sc);color:#fff;border-radius:3px;padding:0 4px;margin-right:2px}
+.q-tag{font-style:normal;font-size:9.5px;background:var(--s-prop);color:#1b1b1b;border-radius:3px;padding:0 4px}
+.day.has-req{box-shadow:inset 0 0 0 2px var(--s-prop)}
