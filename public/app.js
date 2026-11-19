@@ -779,10 +779,14 @@ function renderReports(){
 function renderEmailSettings(d,ro){
   const ms=S.mailStatus;
   if(!ms&&!S.mailStatusLoading)loadMailStatus();
-  const status=!ms?'<span class="muted">Checking…</span>':ms.error?`<span class="flag warn">Can’t check right now</span>`:ms.configured?`<span class="flag ok">Sending from ${esc(ms.from)}</span>`:'<span class="flag warn">Not set up yet: emails won’t send until the sending account is added in Vercel</span>';
+  const status=!ms?'<span class="muted">Checking…</span>':ms.error?`<span class="flag warn">Can’t check right now</span>`:ms.configured?`<span class="flag ok">Sending from ${esc(ms.from)}</span>`:'<span class="flag warn">Not set up yet: connect a Gmail account below</span>';
+  const gm=ms&&!ms.error&&ms.gmailBridge;
+  const gmail=!gm?'':ms.via==='gmail'?`<div class="row" style="gap:8px;flex-wrap:wrap"><span>Emails send from <b>${esc(ms.from)}</b> through Gmail.</span><button class="btn sm" data-act="gmail-connect" ${S.gmailBusy?'disabled':''}>Connect a different account</button><button class="btn sm danger" data-act="gmail-disconnect" ${S.gmailBusy?'disabled':''}>Disconnect</button></div>`
+    :`<div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn primary" data-act="gmail-connect" ${S.gmailBusy?'disabled':''}>Connect Gmail (${esc(S.email)})</button><span class="muted" style="font-size:12px">Emails send from the account of whoever connects it. Erin should sign in here and click this.</span></div>`;
   const perm=('Notification' in window)?Notification.permission:'unsupported';
   return `<div class="panel" style="margin-bottom:16px"><div class="row between" style="margin-bottom:10px"><h3>New-lead emails &amp; alerts</h3>${status}</div>
   <p class="muted" style="margin-top:0;font-size:13px">When someone submits the website inquiry form, they get the reply below and the alert addresses get an email with the details. Everyone with events access also sees an alert in this app.</p>
+  ${gmail?`<div style="margin-bottom:12px">${gmail}</div>`:''}
   <div class="fields">
     <div class="f"><span class="lbl">Customer auto-reply</span><label class="check" for="s-autoReplyOn"><input type="checkbox" id="s-autoReplyOn" data-sbind="autoReplyOn" data-type="bool" ${d.autoReplyOn!==false?'checked':''} ${ro}> Send automatically</label></div>
     <div class="f"><label for="s-leadAlertTo">Email new-lead alerts to</label><input class="cell-in" id="s-leadAlertTo" style="width:100%" data-sbind="leadAlertTo" value="${esc(d.leadAlertTo||'')}" placeholder="erin@bandstandbrewworks.com" ${ro}></div>
@@ -801,6 +805,20 @@ async function loadMailStatus(){
   try{const r=await fetch('/api/lead-notify?status=1',{cache:'no-store'});S.mailStatus=r.ok?await r.json():{error:true};}
   catch(e){S.mailStatus={error:true};}
   S.mailStatusLoading=false;scheduleRender();
+}
+async function gmailCall(method,path){
+  const {data:{session}}=await sb.auth.getSession();
+  const base=(S.mailStatus&&S.mailStatus.membershipsUrl)||'https://bandstand-memberships.vercel.app';
+  const r=await fetch(base+'/api/events-email/'+path,{method,headers:{Authorization:'Bearer '+(session&&session.access_token||'')}});
+  const j=await r.json().catch(()=>({}));if(!r.ok)throw new Error(j.error||('Error '+r.status));return j;
+}
+async function gmailConnect(){S.gmailBusy=true;render();try{const j=await gmailCall('POST','connect');location.href=j.url;}catch(e){S.gmailBusy=false;toast('Couldn’t start Gmail connection: '+e.message);render();}}
+async function gmailDisconnect(){S.gmailBusy=true;render();try{await gmailCall('DELETE','status');toast('Gmail disconnected');}catch(e){toast('Couldn’t disconnect: '+e.message);}S.gmailBusy=false;S.mailStatus=null;render();}
+function gmailReturnNotice(){
+  let q;try{q=new URLSearchParams(location.search)}catch(e){return}
+  if(!q.has('gmail')&&!q.has('gmail_error'))return;
+  setTimeout(()=>toast(q.has('gmail')?'Gmail connected. New-lead emails will send from it.':'Gmail not connected: '+q.get('gmail_error')),300);
+  try{history.replaceState(null,'',location.pathname+location.hash)}catch(e){}
 }
 async function sendTestMail(){
   S.mailTesting=true;render();
@@ -858,6 +876,8 @@ document.addEventListener('click',e=>{
   switch(act){
     case 'nav':go(el.dataset.view);break;
     case 'mail-test':sendTestMail();break;
+    case 'gmail-connect':gmailConnect();break;
+    case 'gmail-disconnect':gmailDisconnect();break;
     case 'notif-on':if('Notification' in window)Notification.requestPermission().then(()=>render());break;
     case 'lead-alert-close':S.leadAlert=null;render();break;
     case 'lead-alert-open':{const id=el.dataset.id;S.leadAlert=null;S.tab='details';go('event',id);break;}
@@ -1014,6 +1034,7 @@ async function afterLogin(){
 }
 window.addEventListener('focus',()=>{if(S.auth==='ok'&&S.loaded)loadAll()});
 async function init(){
+  gmailReturnNotice();
   fromHash();
   sb=supa();
   if(!sb){S.auth='config';render();return;}

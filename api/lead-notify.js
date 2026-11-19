@@ -4,8 +4,12 @@
 //   POST (from the app, Authorization: Bearer <staff session>) { test: true } -> test email to that staff member
 //   GET  ?status=1  -> whether sending is set up (no secrets returned)
 //
-// Sending uses SMTP (a Google Workspace / Gmail app password works) or Resend.
+// Sending goes through, in order of preference:
+//   1. the Gmail account connected in Settings (stored and sent by the memberships app)
+//   2. SMTP (e.g. a Google app password) or Resend, if configured
 // Vercel environment variables:
+//   MEMBERSHIPS_MAIL_SECRET          shared with EVENTS_MAIL_SECRET in the memberships project
+//   MEMBERSHIPS_URL (optional)       default https://bandstand-memberships.vercel.app
 //   LEAD_HOOK_SECRET                 shared with the database (private_event_secrets.lead_hook_secret)
 //   SMTP_USER, SMTP_PASS             e.g. erin@bandstandbrewworks.com + a Google app password
 //   SMTP_HOST, SMTP_PORT (optional)  default smtp.gmail.com : 465
@@ -27,6 +31,20 @@ const DEFAULTS = {
   replyTo: ''
 };
 
+const MEMBERSHIPS_URL = (process.env.MEMBERSHIPS_URL || 'https://bandstand-memberships.vercel.app').replace(/\/$/, '');
+let gmailCache = null;
+async function gmailAccount() {
+  if (!process.env.MEMBERSHIPS_MAIL_SECRET) return null;
+  if (gmailCache) return gmailCache;
+  try {
+    const r = await fetch(`${MEMBERSHIPS_URL}/api/events-email/status`, { headers: { 'x-mail-secret': process.env.MEMBERSHIPS_MAIL_SECRET } });
+    const j = await r.json();
+    if (r.ok && j.connected && j.email) return (gmailCache = { kind: 'gmail', from: j.email, connectedAt: j.connectedAt });
+  } catch (e) { /* fall through */ }
+  return null;
+}
+async function pickMailer() { return (await gmailAccount()) || mailer(); }
+
 function mailer() {
   if (process.env.RESEND_API_KEY && process.env.RESEND_FROM) return { kind: 'resend', from: process.env.RESEND_FROM };
   if (process.env.SMTP_USER && process.env.SMTP_PASS) return { kind: 'smtp', from: process.env.SMTP_USER };
@@ -34,10 +52,20 @@ function mailer() {
 }
 const fromName = () => process.env.EMAIL_FROM_NAME || 'Bandstand Brew Works Events';
 
-async function send({ to, subject, text, replyTo }) {
-  const m = mailer();
+async function send({ to, subject, text, replyTo }, m) {
+  m = m || await pickMailer();
   if (!m) throw new Error('Email sending is not set up yet');
   const clean = s => String(s || '').replace(/[\r\n]+/g, ' ').trim();
+  if (m.kind === 'gmail') {
+    const r = await fetch(`${MEMBERSHIPS_URL}/api/events-email/send`, {
+      method: 'POST',
+      headers: { 'x-mail-secret': process.env.MEMBERSHIPS_MAIL_SECRET, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to, subject: clean(subject), text, replyTo: replyTo || '', fromName: fromName() })
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok) throw new Error(j.error || 'Gmail send failed (' + r.status + ')');
+    return;
+  }
   if (m.kind === 'resend') {
     const r = await fetch('https://api.resend.com/emails', {
       method: 'POST',
@@ -117,7 +145,7 @@ async function handleLead(id, secret) {
   const cfg = {};
   for (const k of Object.keys(DEFAULTS)) cfg[k] = st[k] == null || st[k] === '' ? DEFAULTS[k] : st[k];
   cfg.spaces = st.spaces || [];
-  const m = mailer();
+  const m = await pickMailer();
   const replyTo = splitList(cfg.replyTo)[0] || (m && m.from) || '';
   const lines = []; let failed = false;
   const guest = (ev.client || {}).email;
@@ -128,7 +156,7 @@ async function handleLead(id, secret) {
   else if (!guest) autoReplyLine = 'Auto-reply not sent: no email address.';
   else {
     try {
-      await send({ to: guest, subject: fill(cfg.autoReplySubject, ev, cfg), text: fill(cfg.autoReplyBody, ev, cfg), replyTo });
+      await send({ to: guest, subject: fill(cfg.autoReplySubject, ev, cfg), text: fill(cfg.autoReplyBody, ev, cfg), replyTo }, m);
       autoReplyLine = `Auto-reply sent to ${guest}.`;
     } catch (e) { autoReplyLine = `Auto-reply to ${guest} failed: ${e.message}`; failed = true; }
   }
@@ -138,7 +166,7 @@ async function handleLead(id, secret) {
     const c = ev.client || {};
     for (const to of splitList(cfg.leadAlertTo)) {
       try {
-        await send({ to, subject: `New event inquiry: ${c.name || 'Website form'} — ${ev.type || 'Event'}, ${fmtDate(ev.date)}`, text: alertText(ev, cfg, autoReplyLine), replyTo: guest || undefined });
+        await send({ to, subject: `New event inquiry: ${c.name || 'Website form'} — ${ev.type || 'Event'}, ${fmtDate(ev.date)}`, text: alertText(ev, cfg, autoReplyLine), replyTo: guest || undefined }, m);
         lines.push(`New-lead alert emailed to ${to}.`);
       } catch (e) { lines.push(`New-lead alert to ${to} failed: ${e.message}`); failed = true; }
     }
@@ -157,8 +185,8 @@ module.exports = async (req, res) => {
   res.setHeader('Cache-Control', 'no-store');
   try {
     if (req.method === 'GET') {
-      const m = mailer();
-      return res.status(200).json({ configured: !!m, from: m ? m.from : '', via: m ? m.kind : '', hook: !!process.env.LEAD_HOOK_SECRET });
+      const m = await pickMailer();
+      return res.status(200).json({ configured: !!m, from: m ? m.from : '', via: m ? m.kind : '', hook: !!process.env.LEAD_HOOK_SECRET, gmailBridge: !!process.env.MEMBERSHIPS_MAIL_SECRET, membershipsUrl: MEMBERSHIPS_URL });
     }
     if (req.method !== 'POST') return res.status(405).json({ error: 'Method not allowed' });
     if (!SB_URL || !SB_KEY) return res.status(500).json({ error: 'Supabase settings missing' });
