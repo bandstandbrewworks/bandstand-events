@@ -12,21 +12,24 @@ const DEFAULT_TO = 'erin@bandstandbrewworks.com, deane@bandstandbrewworks.com, a
 
 // Reuse the app's own totals/formatting code so the email matches what staff see.
 let core = null;
-function loadCore() {
+function runCore(src) {
+  const ctx = { window: {}, console };
+  vm.createContext(ctx);
+  vm.runInContext(src + '\n;this.__c={totals,money,fmtDate,fmtTime,fmtShort,num};', ctx);
+  return ctx.__c;
+}
+async function loadCore() {
   if (core) return core;
   for (const p of [path.join(process.cwd(), 'public', 'core.js'), path.join(__dirname, '..', 'public', 'core.js')]) {
-    try {
-      const ctx = { window: {}, console };
-      vm.createContext(ctx);
-      vm.runInContext(fs.readFileSync(p, 'utf8') + '\n;this.__c={totals,money,fmtDate,fmtTime,fmtShort,num};', ctx);
-      return (core = ctx.__c);
-    } catch (e) { /* try next */ }
+    try { return (core = runCore(fs.readFileSync(p, 'utf8'))); } catch (e) { /* try next */ }
   }
-  throw new Error('core.js not found');
+  // Fallback: the same file is served publicly by the site.
+  const r = await fetch(APP_URL + '/core.js');
+  if (!r.ok) throw new Error('core.js not available');
+  return (core = runCore(await r.text()));
 }
 
-function beoEmail(ev, cfg, hours) {
-  const C = loadCore();
+function beoEmail(ev, cfg, hours, C) {
   const c = ev.client || {}, beo = ev.beo || {};
   const spaces = (ev.spaceIds || []).map(id => ((cfg.spaces || []).find(s => s.id === id) || {}).name || '(removed space)').join(', ') || '—';
   const when = `${C.fmtDate(ev.date, true)} · ${C.fmtTime(ev.start)}–${C.fmtTime(ev.end)}`;
@@ -61,7 +64,7 @@ function beoEmail(ev, cfg, hours) {
 
 async function sendBeo(ev, cfg, hours, m) {
   const to = splitList(cfg.beoReminderTo || DEFAULT_TO);
-  const { subject, text } = beoEmail(ev, cfg, hours);
+  const { subject, text } = beoEmail(ev, cfg, hours, await loadCore());
   const ok = [], bad = [];
   for (const addr of to) {
     try { await send({ to: addr, subject, text }, m); ok.push(addr); }
