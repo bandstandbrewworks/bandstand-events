@@ -32,6 +32,10 @@ const DEFAULT_CONFIG={
   ],
   taxRate:7, serviceRate:22, adminFeeRate:5, depositPct:25, balanceDueDays:7, taxService:true,
   defaultStart:'18:00', defaultEnd:'22:00', defaultGuests:50,
+  autoReplyOn:true,
+  autoReplySubject:'Thanks for reaching out to Bandstand Brew Works!',
+  autoReplyBody:"Hi {first_name},\n\nThank you for reaching out to Bandstand Brew Works about your {event_type} on {date}! We received your request for {guests} guests, and our events team will be in touch within one business day to talk through spaces, menus and availability.\n\nIf you have questions in the meantime, just reply to this email.\n\nCheers,\nThe Bandstand Brew Works events team\n3922 Main St, Warrensburg, NY\nWhere Community Gathers",
+  leadAlertTo:'erin@bandstandbrewworks.com', replyTo:'erin@bandstandbrewworks.com',
   staff:['Laurie','Darby','Adam'],
   eventTypes:['Private party','Corporate','Wedding / rehearsal','Birthday','Fundraiser','Holiday party','Ticketed show','Other'],
   sources:['Website form','Phone','Email','Walk-in','Repeat client','Referral','Social media'],
@@ -161,9 +165,34 @@ function applySpacePricing(ev){
 function setPath(obj,path,val){const ks=path.split('.');let o=obj;for(let i=0;i<ks.length-1;i++){const k=ks[i];if(o[k]==null)o[k]=/^\d+$/.test(ks[i+1])?[]:{};o=o[k];}o[ks[ks.length-1]]=val}
 function getPath(obj,path){return path.split('.').reduce((o,k)=>o==null?undefined:o[k],obj)}
 
+/* ---------- new-lead alerts ---------- */
+let seen=null;
+function seenKey(){return 'pe_seen_leads_'+(S.uid||'anon')}
+function isWebLead(e){return !!(e&&e.notify&&e.source==='Website form')}
+function loadSeen(){
+  let raw=null;try{raw=localStorage.getItem(seenKey())}catch(e){}
+  if(raw){try{seen=new Set(JSON.parse(raw))}catch(e){seen=new Set()}return false;}
+  seen=new Set(evList().filter(isWebLead).map(e=>e.id));saveSeen();return true; // first visit: nothing is "new"
+}
+function saveSeen(){try{localStorage.setItem(seenKey(),JSON.stringify([...seen].slice(-2000)))}catch(e){}}
+function isNewLead(e){return !!seen&&isWebLead(e)&&e.status==='Lead'&&!seen.has(e.id)}
+function newLeads(){return evList().filter(isNewLead).sort((a,b)=>String(b.createdAt||'').localeCompare(String(a.createdAt||'')))}
+function markSeen(id){if(seen&&id&&!seen.has(id)){seen.add(id);saveSeen();if(S.leadAlert&&S.leadAlert.id===id)S.leadAlert=null;}}
+function announceLead(ev){
+  const c=ev.client||{};
+  S.leadAlert={id:ev.id,name:c.name||'Someone',what:[ev.type,fmtShort(ev.date),ev.guests?ev.guests+' guests':''].filter(Boolean).join(' · ')};
+  try{if('Notification' in window&&Notification.permission==='granted'){const n=new Notification('New event inquiry',{body:`${S.leadAlert.name}: ${S.leadAlert.what}`,tag:'lead-'+ev.id});n.onclick=()=>{window.focus();markSeen(ev.id);S.tab='details';go('event',ev.id);n.close()};}}catch(e){}
+}
+function leadAlertHtml(){
+  const a=S.leadAlert;if(!a||S.auth!=='ok')return '';
+  const more=newLeads().length-1;
+  return `<div class="lead-alert" role="alert"><div><b>New website inquiry</b><div>${esc(a.name)} · ${esc(a.what)}</div>${more>0?`<div class="muted" style="font-size:12px">+${more} more new on the pipeline</div>`:''}</div>
+    <div class="row"><button class="btn sm primary" data-act="lead-alert-open" data-id="${esc(a.id)}">Open</button><button class="btn sm" data-act="lead-alert-close" aria-label="Dismiss">Dismiss</button></div></div>`;
+}
+
 /* ---------- routing ---------- */
 function go(view,id){
-  S.view=view; S.eventId=id||null; S.delArm=false; S.beoText=null; S.toastText=null;
+  S.view=view; S.eventId=id||null; S.delArm=false; if(view==='event')markSeen(id); S.beoText=null; S.toastText=null;
   if(view==='settings') S.draft=clone(S.config);
   if(view==='inquiry') S.inquiryDone=null;
   const h=view==='event'?'event-'+id:view==='customer'?'customer-'+encodeURIComponent(id):view;
@@ -172,7 +201,7 @@ function go(view,id){
 }
 function fromHash(){
   let h='';try{h=location.hash.slice(1)}catch(e){}
-  if(h.startsWith('event-')){S.view='event';S.eventId=h.slice(6);}
+  if(h.startsWith('event-')){S.view='event';S.eventId=h.slice(6);markSeen(S.eventId);}
   else if(h.startsWith('customer-')){S.view='customer';try{S.eventId=decodeURIComponent(h.slice(9))}catch(e){S.eventId=h.slice(9)}}
   else if(['pipeline','calendar','events','customers','reports','import','inquiry','settings'].includes(h)){S.view=h;if(h==='settings')S.draft=clone(S.config);}
 }
@@ -188,7 +217,7 @@ function render(){
   const st=main.scrollTop;
   document.getElementById('app').classList.toggle('noside',S.auth!=='ok');
   document.getElementById('side').innerHTML=S.auth==='ok'?renderSide():'';
-  main.innerHTML=renderMain();
+  main.innerHTML=renderMain()+leadAlertHtml();
   main.scrollTop=st;
   if(keep){const el=document.getElementById(keep.id);if(el){if(keep.dirty&&el.type!=='checkbox'){el.value=keep.value;el.dataset.dirty='1';}el.focus({preventScroll:true});try{el.setSelectionRange(keep.s,keep.e)}catch(e){}}}
 }
@@ -197,13 +226,14 @@ function renderSide(){
   const open=evs.filter(e=>e.status==='Lead'||e.status==='Proposal Sent').length;
   const nav=[['pipeline','Pipeline',open],['calendar','Calendar',''],['events','All events',evs.length||''],['customers','Customers',customers().length||''],['reports','Reports',''],['import','Import',''],['inquiry','Website form',''],['settings','Settings','']];
   const on=S.view==='event'?'':S.view==='customer'?'customers':S.view;
+  const nl=newLeads().length;
   let status;
   status=S.stale?'<span class="dotline"><i class="off"></i>Can’t reach the database</span>':'<span class="dotline"><i></i>Live · saved to Supabase</span>';
   if(S.email) status+=`<span>${esc(S.email)}</span><button class="link" data-act="sign-out" style="text-align:left;color:var(--gold)">Sign out</button>`;
   const l=logoSrc();
   return `${l?`<div class="brand-logo"><img src="${l}" alt="${esc(S.config.venueName)}"></div>`:`<div class="brand">${esc(S.config.venueName)}</div>`}<div style="padding:0 8px;margin-top:-6px"><div class="tagline">${esc(S.config.tagline||'')}</div><div class="brand"><small>PRIVATE EVENTS</small></div></div>
   <button class="side-new" data-act="new-event">+ New event</button>
-  <nav aria-label="Sections">${nav.map(([v,l,n])=>`<button class="nav-btn ${on===v?'on':''}" data-act="nav" data-view="${v}"><span>${l}</span><span class="n">${n}</span></button>`).join('')}</nav>
+  <nav aria-label="Sections">${nav.map(([v,l,n])=>`<button class="nav-btn ${on===v?'on':''}" data-act="nav" data-view="${v}"><span>${l}${v==='pipeline'&&nl?` <span class="newpill">${nl} new</span>`:''}</span><span class="n">${n}</span></button>`).join('')}</nav>
   <div class="side-foot">${status}${S.readOnly?'<span>View-only access</span>':''}</div>`;
 }
 function renderMain(){
@@ -233,7 +263,7 @@ function card(e){
   const t=totals(e), conf=conflicts(e).some(c=>c.hold);
   const due=e.followUp&&ACTIVE.includes(e.status)&&e.status!=='Definite'&&e.followUp<=todayISO();
   return `<article class="card ${sc(e.status)}" draggable="true" data-drag="${esc(e.id)}" data-act="open-event" data-id="${esc(e.id)}" tabindex="0" role="button" aria-label="Open ${esc(e.title)}">
-    <div class="row between"><span class="meta">${esc(fmtShort(e.date))}${e.start?' · '+esc(fmtTime(e.start)):''}</span>${conf?'<span class="flag">Conflict</span>':''}</div>
+    <div class="row between"><span class="meta">${esc(fmtShort(e.date))}${e.start?' · '+esc(fmtTime(e.start)):''}</span><span>${isNewLead(e)?'<span class="flag ok">New</span> ':''}${conf?'<span class="flag">Conflict</span>':''}</span></div>
     <h4>${esc(e.title||'Untitled event')}</h4>
     <div class="meta">${esc(e.client&&e.client.name||'No contact yet')} · ${num(e.guests)} guests</div>
     ${(e.spaceIds||[]).length?`<div class="chips">${e.spaceIds.map(id=>`<span class="chip">${esc(spaceName(id))}</span>`).join('')}</div>`:''}
@@ -746,6 +776,44 @@ function renderReports(){
 }
 
 /* ---------- settings ---------- */
+function renderEmailSettings(d,ro){
+  const ms=S.mailStatus;
+  if(!ms&&!S.mailStatusLoading)loadMailStatus();
+  const status=!ms?'<span class="muted">Checking…</span>':ms.error?`<span class="flag warn">Can’t check right now</span>`:ms.configured?`<span class="flag ok">Sending from ${esc(ms.from)}</span>`:'<span class="flag warn">Not set up yet: emails won’t send until the sending account is added in Vercel</span>';
+  const perm=('Notification' in window)?Notification.permission:'unsupported';
+  return `<div class="panel" style="margin-bottom:16px"><div class="row between" style="margin-bottom:10px"><h3>New-lead emails &amp; alerts</h3>${status}</div>
+  <p class="muted" style="margin-top:0;font-size:13px">When someone submits the website inquiry form, they get the reply below and the alert addresses get an email with the details. Everyone with events access also sees an alert in this app.</p>
+  <div class="fields">
+    <div class="f"><span class="lbl">Customer auto-reply</span><label class="check" for="s-autoReplyOn"><input type="checkbox" id="s-autoReplyOn" data-sbind="autoReplyOn" data-type="bool" ${d.autoReplyOn!==false?'checked':''} ${ro}> Send automatically</label></div>
+    <div class="f"><label for="s-leadAlertTo">Email new-lead alerts to</label><input class="cell-in" id="s-leadAlertTo" style="width:100%" data-sbind="leadAlertTo" value="${esc(d.leadAlertTo||'')}" placeholder="erin@bandstandbrewworks.com" ${ro}></div>
+    <div class="f"><label for="s-replyTo">Customer replies go to</label><input class="cell-in" id="s-replyTo" type="email" style="width:100%" data-sbind="replyTo" value="${esc(d.replyTo||'')}" placeholder="erin@bandstandbrewworks.com" ${ro}></div>
+    <div class="f wide"><label for="s-autoReplySubject">Auto-reply subject</label><input class="cell-in" id="s-autoReplySubject" data-sbind="autoReplySubject" value="${esc(d.autoReplySubject||'')}" ${ro}></div>
+    <div class="f wide"><label for="s-autoReplyBody">Auto-reply message</label><textarea id="s-autoReplyBody" data-sbind="autoReplyBody" style="min-height:220px" ${ro}>${esc(d.autoReplyBody||'')}</textarea>
+      <span class="muted" style="font-size:12px">Fill-ins: {first_name} {name} {event_type} {date} {guests} {space} {start} {end}</span></div>
+  </div>
+  <div class="row" style="margin-top:10px;flex-wrap:wrap">
+    <button class="btn" data-act="mail-test" ${S.mailTesting?'disabled':''}>${S.mailTesting?'Sending…':'Send me a test auto-reply'}</button>
+    ${perm==='default'?'<button class="btn" data-act="notif-on">Turn on desktop alerts on this computer</button>':perm==='granted'?'<span class="flag ok">Desktop alerts on for this computer</span>':''}
+  </div></div>`;
+}
+async function loadMailStatus(){
+  S.mailStatusLoading=true;
+  try{const r=await fetch('/api/lead-notify?status=1',{cache:'no-store'});S.mailStatus=r.ok?await r.json():{error:true};}
+  catch(e){S.mailStatus={error:true};}
+  S.mailStatusLoading=false;scheduleRender();
+}
+async function sendTestMail(){
+  S.mailTesting=true;render();
+  try{
+    const {data:{session}}=await sb.auth.getSession();
+    const d=S.draft||S.config;
+    const r=await fetch('/api/lead-notify',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+(session&&session.access_token||'')},
+      body:JSON.stringify({test:true,settings:{autoReplySubject:d.autoReplySubject,autoReplyBody:d.autoReplyBody,replyTo:d.replyTo}})});
+    const j=await r.json().catch(()=>({}));
+    toast(r.ok?`Test email sent to ${j.to}`:`Test email not sent: ${j.error||r.status}`);
+  }catch(e){toast('Test email not sent: '+e.message);}
+  S.mailTesting=false;render();
+}
 function renderSettings(){
   const d=S.draft||(S.draft=clone(S.config)); const ro=S.readOnly?'disabled':'';
   const sIn=(path,type,w)=>`<input class="cell-in" id="${'s-'+path.replace(/\./g,'-')}" type="${type||'text'}" data-sbind="${path}" ${type==='number'?'data-type="num" step="any" min="0"':''} value="${esc(getPath(d,path))}" ${w?`style="width:${w}"`:''} aria-label="${esc(path)}" ${ro}>`;
@@ -775,6 +843,7 @@ function renderSettings(){
     <div class="tbl-wrap"><table><thead><tr><th>Name &amp; details</th><th>Menu section</th><th>Category</th><th>Unit</th><th class="num">Price</th><th></th></tr></thead><tbody>
     ${d.catalog.map((c,i)=>`<tr><td>${sIn(`catalog.${i}.name`)}<textarea class="cell-in desc-box" id="s-catalog-${i}-desc" data-sbind="catalog.${i}.desc" rows="${descRows(c.desc)}" title="${esc(c.desc||'')}" placeholder="Choices / details shown to clients" aria-label="Details" ${ro}>${esc(c.desc||'')}</textarea></td><td>${sIn(`catalog.${i}.group`,'text','150px')}</td><td><select class="cell-in" id="s-catalog-${i}-category" data-sbind="catalog.${i}.category" aria-label="Category" ${ro}>${CATS.map(x=>`<option ${x===c.category?'selected':''}>${x}</option>`).join('')}</select></td><td><select class="cell-in" id="s-catalog-${i}-unit" data-sbind="catalog.${i}.unit" aria-label="Unit" ${ro}>${UNITS.map(x=>`<option ${x===c.unit?'selected':''}>${x}</option>`).join('')}</select></td><td class="num">${sIn(`catalog.${i}.price`,'number','100px')}</td><td class="num"><button class="btn sm danger" data-act="s-del-item" data-i="${i}" ${ro}>Remove</button></td></tr>`).join('')}
     </tbody></table></div></div>
+  ${renderEmailSettings(d,ro)}
   <div class="panel" style="margin-bottom:16px"><h3>Lists (one per line)</h3><div class="fields">
     ${[['staff','Event managers'],['eventTypes','Event types'],['sources','Lead sources'],['lostReasons','Lost reasons']].map(([k,l])=>`<div class="f"><label for="s-list-${k}">${l}</label><textarea id="s-list-${k}" data-slist="${k}" style="min-height:130px" ${ro}>${esc(d[k].join('\n'))}</textarea></div>`).join('')}
   </div></div>
@@ -788,6 +857,10 @@ document.addEventListener('click',e=>{
   const act=el.dataset.act, ev=S.events.get(S.eventId);
   switch(act){
     case 'nav':go(el.dataset.view);break;
+    case 'mail-test':sendTestMail();break;
+    case 'notif-on':if('Notification' in window)Notification.requestPermission().then(()=>render());break;
+    case 'lead-alert-close':S.leadAlert=null;render();break;
+    case 'lead-alert-open':{const id=el.dataset.id;S.leadAlert=null;S.tab='details';go('event',id);break;}
     case 'sign-out':sb.auth.signOut().then(()=>location.reload());break;
     case 'copy-link':{const f=document.getElementById('client-link');if(!clientLink(S.eventId))return toast('The link appears once the event is saved.');copyText(f.value,()=>{f.select();toast('Select the link and copy it')},'Client link copied');break;}
     case 'copy-field':{const f=document.getElementById(el.dataset.field);copyText(f.value,()=>{f.select();toast('Select the text and copy it')},'Copied');break;}
@@ -913,6 +986,7 @@ async function loadAll(){
   const m=new Map();(ev.data||[]).forEach(r=>m.set(r.id,rowToEvent(r)));S.events=m;
   if(st.data&&st.data.data&&Object.keys(st.data.data).length)S.config=mergeConfig(st.data.data);
   if(S.view==='settings')S.draft=clone(S.config);
+  if(!seen){loadSeen();const nl=newLeads();if(nl.length&&!S.leadAlert)announceLead(nl[0]);}
   S.loaded=true;S.stale=false;scheduleRender();
 }
 let channel=null;
@@ -921,7 +995,7 @@ function subscribe(){
   channel=sb.channel('private-events')
     .on('postgres_changes',{event:'*',schema:'public',table:'private_events'},p=>{
       if(p.eventType==='DELETE'){const id=p.old&&p.old.id;if(id)S.events.delete(id);}
-      else if(p.new&&p.new.id){S.events.set(p.new.id,rowToEvent(p.new));}
+      else if(p.new&&p.new.id){const ev=rowToEvent(p.new);S.events.set(p.new.id,ev);if(p.eventType==='INSERT'&&seen&&isNewLead(ev)&&!(S.view==='event'&&S.eventId===ev.id))announceLead(ev);}
       scheduleRender();
     })
     .on('postgres_changes',{event:'*',schema:'public',table:'private_event_settings'},p=>{
