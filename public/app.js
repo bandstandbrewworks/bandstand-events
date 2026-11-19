@@ -195,7 +195,7 @@ function leadAlertHtml(){
 /* ---------- routing ---------- */
 function go(view,id){
   S.view=view; S.eventId=id||null; S.delArm=false; if(view==='event')markSeen(id); S.beoText=null; S.toastText=null;
-  if(view==='settings') S.draft=clone(S.config);
+  if(view==='settings'||view==='menu') S.draft=clone(S.config);
   if(view==='inquiry') S.inquiryDone=null;
   const h=view==='event'?'event-'+id:view==='customer'?'customer-'+encodeURIComponent(id):view;
   try{ if(location.hash.slice(1)!==h) location.hash=h; }catch(e){}
@@ -205,7 +205,7 @@ function fromHash(){
   let h='';try{h=location.hash.slice(1)}catch(e){}
   if(h.startsWith('event-')){S.view='event';S.eventId=h.slice(6);markSeen(S.eventId);}
   else if(h.startsWith('customer-')){S.view='customer';try{S.eventId=decodeURIComponent(h.slice(9))}catch(e){S.eventId=h.slice(9)}}
-  else if(['pipeline','calendar','events','customers','reports','import','inquiry','settings'].includes(h)){S.view=h;if(h==='settings')S.draft=clone(S.config);}
+  else if(['pipeline','calendar','events','customers','reports','import','inquiry','menu','settings'].includes(h)){S.view=h;if(h==='settings'||h==='menu')S.draft=clone(S.config);}
 }
 window.addEventListener('hashchange',()=>{fromHash();render()});
 
@@ -226,7 +226,7 @@ function render(){
 function renderSide(){
   const evs=evList();
   const open=evs.filter(e=>e.status==='Lead'||e.status==='Proposal Sent').length;
-  const nav=[['pipeline','Pipeline',open],['calendar','Calendar',''],['events','All events',evs.length||''],['customers','Customers',customers().length||''],['reports','Reports',''],['import','Import',''],['inquiry','Website form',''],['settings','Settings','']];
+  const nav=[['pipeline','Pipeline',open],['calendar','Calendar',''],['events','All events',evs.length||''],['customers','Customers',customers().length||''],['reports','Reports',''],['import','Import',''],['inquiry','Website form',''],['menu','Menu & packages',S.config.catalog.length||''],['settings','Settings','']];
   const on=S.view==='event'?'':S.view==='customer'?'customers':S.view;
   const nl=newLeads().length;
   let status;
@@ -250,6 +250,7 @@ function renderMain(){
     case 'reports':return renderReports();
     case 'inquiry':return renderInquiry();
     case 'settings':return renderSettings();
+    case 'menu':return renderMenu();
     case 'event':return renderDetail();
     default:return renderPipeline();
   }
@@ -855,11 +856,30 @@ async function sendTestMail(){
   }catch(e){toast('Test email not sent: '+e.message);}
   S.mailTesting=false;render();
 }
+function renderMenu(){
+  const d=S.draft||(S.draft=clone(S.config)); const ro=S.readOnly?'disabled':'';
+  const sIn=(path,type,w)=>`<input class="cell-in" id="${'s-'+path.replace(/\./g,'-')}" type="${type||'text'}" data-sbind="${path}" ${type==='number'?'data-type="num" step="any" min="0"':''} value="${esc(getPath(d,path))}" ${w?`style="width:${w}"`:''} aria-label="${esc(path)}" ${ro}>`;
+  const dirty=JSON.stringify(d)!==JSON.stringify(S.config);
+  const groups=[];d.catalog.forEach(c=>{const g=c.group||c.category;if(g&&!groups.includes(g))groups.push(g)});
+  const q=String(S.menuQ||'').trim().toLowerCase(), grp=S.menuGroup||'all';
+  const shown=d.catalog.map((c,i)=>[c,i]).filter(([c])=>(grp==='all'||(c.group||c.category)===grp)&&(!q||[c.name,c.desc,c.group,c.category].join(' ').toLowerCase().includes(q)));
+  return `<div class="page-head"><div><h1>Menu &amp; packages</h1><p>Event packages, drink packages, the regular menu and rentals. These fill the “Add” list on each event’s Proposal tab. The menu section groups them in that list.</p></div>
+   <div class="row">${dirty?'<span class="flag warn">Unsaved changes</span>':''}<button class="btn" data-act="settings-discard" ${dirty?'':'disabled'}>Discard</button><button class="btn primary" data-act="settings-save" ${dirty&&!S.readOnly?'':'disabled'}>Save menu</button></div></div>
+  <div class="panel" style="margin-bottom:16px"><div class="row between" style="margin-bottom:10px;flex-wrap:wrap;gap:8px">
+    <div class="row" style="flex-wrap:wrap"><input type="text" id="menu-q" data-ui="menuQ" placeholder="Search items" value="${esc(S.menuQ||'')}" style="width:220px">
+      <select id="menu-group" data-ui="menuGroup" style="width:auto" aria-label="Menu section"><option value="all">All sections (${d.catalog.length})</option>${groups.map(g=>`<option value="${esc(g)}" ${grp===g?'selected':''}>${esc(g)} (${d.catalog.filter(c=>(c.group||c.category)===g).length})</option>`).join('')}</select>
+      ${q||grp!=='all'?`<span class="muted" style="font-size:13px">Showing ${shown.length} of ${d.catalog.length}</span>`:''}</div>
+    <button class="btn sm" data-act="s-add-item" ${ro}>Add item</button></div>
+    <div class="tbl-wrap"><table><thead><tr><th>Name &amp; details</th><th>Menu section</th><th>Category</th><th>Unit</th><th class="num">Price</th><th></th></tr></thead><tbody>
+    ${shown.map(([c,i])=>`<tr><td>${sIn(`catalog.${i}.name`)}<textarea class="cell-in desc-box" id="s-catalog-${i}-desc" data-sbind="catalog.${i}.desc" rows="${descRows(c.desc)}" title="${esc(c.desc||'')}" placeholder="Choices / details shown to clients" aria-label="Details" ${ro}>${esc(c.desc||'')}</textarea></td><td>${sIn(`catalog.${i}.group`,'text','150px')}</td><td><select class="cell-in" id="s-catalog-${i}-category" data-sbind="catalog.${i}.category" aria-label="Category" ${ro}>${CATS.map(x=>`<option ${x===c.category?'selected':''}>${x}</option>`).join('')}</select></td><td><select class="cell-in" id="s-catalog-${i}-unit" data-sbind="catalog.${i}.unit" aria-label="Unit" ${ro}>${UNITS.map(x=>`<option ${x===c.unit?'selected':''}>${x}</option>`).join('')}</select></td><td class="num">${sIn(`catalog.${i}.price`,'number','100px')}</td><td class="num"><button class="btn sm danger" data-act="s-del-item" data-i="${i}" ${ro}>Remove</button></td></tr>`).join('')}
+    ${shown.length?'':'<tr><td colspan="6" class="empty">No items match.</td></tr>'}
+    </tbody></table></div></div>`;
+}
 function renderSettings(){
   const d=S.draft||(S.draft=clone(S.config)); const ro=S.readOnly?'disabled':'';
   const sIn=(path,type,w)=>`<input class="cell-in" id="${'s-'+path.replace(/\./g,'-')}" type="${type||'text'}" data-sbind="${path}" ${type==='number'?'data-type="num" step="any" min="0"':''} value="${esc(getPath(d,path))}" ${w?`style="width:${w}"`:''} aria-label="${esc(path)}" ${ro}>`;
   const dirty=JSON.stringify(d)!==JSON.stringify(S.config);
-  return `<div class="page-head"><div><h1>Settings</h1><p>Spaces, menu and default terms used for new events. The spaces and prices below are examples. Replace them with Bandstand’s real ones.</p></div>
+  return `<div class="page-head"><div><h1>Settings</h1><p>Venue defaults, spaces, emails, lists and contract terms. Food, drink packages and rentals are on the <a href="#menu">Menu &amp; packages</a> page.</p></div>
    <div class="row">${dirty?'<span class="flag warn">Unsaved changes</span>':''}<button class="btn" data-act="settings-discard" ${dirty?'':'disabled'}>Discard</button><button class="btn primary" data-act="settings-save" ${dirty&&!S.readOnly?'':'disabled'}>Save settings</button></div></div>
   <div class="panel" style="margin-bottom:16px"><h3>Venue &amp; defaults</h3><div class="fields">
     <div class="f"><label for="s-venueName">Venue name</label>${sIn('venueName')}</div>
@@ -879,10 +899,6 @@ function renderSettings(){
   <div class="panel" style="margin-bottom:16px"><div class="row between" style="margin-bottom:10px"><h3>Spaces</h3><button class="btn sm" data-act="s-add-space" ${ro}>Add space</button></div>
     <div class="tbl-wrap"><table><thead><tr><th>Name</th><th class="num">Seated</th><th class="num">Standing</th><th class="num">Room fee</th><th class="num">F&amp;B min</th><th>Blocks all spaces</th><th></th></tr></thead><tbody>
     ${d.spaces.map((s,i)=>`<tr><td>${sIn(`spaces.${i}.name`)}</td><td class="num">${sIn(`spaces.${i}.seated`,'number','80px')}</td><td class="num">${sIn(`spaces.${i}.standing`,'number','80px')}</td><td class="num">${sIn(`spaces.${i}.roomFee`,'number','100px')}</td><td class="num">${sIn(`spaces.${i}.fbMin`,'number','100px')}</td><td><label class="check" for="s-spaces-${i}-buyout"><input type="checkbox" id="s-spaces-${i}-buyout" data-sbind="spaces.${i}.buyout" data-type="bool" ${s.buyout?'checked':''} ${ro}> Buyout</label></td><td class="num"><button class="btn sm danger" data-act="s-del-space" data-i="${i}" ${ro}>Remove</button></td></tr>`).join('')}
-    </tbody></table></div></div>
-  <div class="panel" style="margin-bottom:16px"><div class="row between" style="margin-bottom:10px"><h3>Menu, packages &amp; rentals</h3><button class="btn sm" data-act="s-add-item" ${ro}>Add item</button></div>
-    <div class="tbl-wrap"><table><thead><tr><th>Name &amp; details</th><th>Menu section</th><th>Category</th><th>Unit</th><th class="num">Price</th><th></th></tr></thead><tbody>
-    ${d.catalog.map((c,i)=>`<tr><td>${sIn(`catalog.${i}.name`)}<textarea class="cell-in desc-box" id="s-catalog-${i}-desc" data-sbind="catalog.${i}.desc" rows="${descRows(c.desc)}" title="${esc(c.desc||'')}" placeholder="Choices / details shown to clients" aria-label="Details" ${ro}>${esc(c.desc||'')}</textarea></td><td>${sIn(`catalog.${i}.group`,'text','150px')}</td><td><select class="cell-in" id="s-catalog-${i}-category" data-sbind="catalog.${i}.category" aria-label="Category" ${ro}>${CATS.map(x=>`<option ${x===c.category?'selected':''}>${x}</option>`).join('')}</select></td><td><select class="cell-in" id="s-catalog-${i}-unit" data-sbind="catalog.${i}.unit" aria-label="Unit" ${ro}>${UNITS.map(x=>`<option ${x===c.unit?'selected':''}>${x}</option>`).join('')}</select></td><td class="num">${sIn(`catalog.${i}.price`,'number','100px')}</td><td class="num"><button class="btn sm danger" data-act="s-del-item" data-i="${i}" ${ro}>Remove</button></td></tr>`).join('')}
     </tbody></table></div></div>
   ${renderEmailSettings(d,ro)}
   <div class="panel" style="margin-bottom:16px"><h3>Lists (one per line)</h3><div class="fields">
@@ -937,12 +953,12 @@ document.addEventListener('click',e=>{
     case 'unsign':mutate(ev.id,x=>{x.contract.signedAt='';x.contract.signedName=''},'Signature cleared');break;
     case 'del-pay':{const p=ev.payments.find(p=>p.id===el.dataset.pid);mutate(ev.id,x=>{x.payments=x.payments.filter(q=>q.id!==el.dataset.pid)},p?`Removed ${p.kind} of ${money(p.amount)}`:'Removed payment');break;}
     case 'inquiry-again':S.inquiryDone=null;render();break;
-    case 'settings-save':{const d=clone(S.draft);d.spaces=d.spaces.filter(s=>String(s.name).trim());d.catalog=d.catalog.filter(c=>String(c.name).trim());persistConfig(d);S.draft=clone(d);toast('Settings saved');render();break;}
+    case 'settings-save':{const d=clone(S.draft);d.spaces=d.spaces.filter(s=>String(s.name).trim());d.catalog=d.catalog.filter(c=>String(c.name).trim());persistConfig(d);S.draft=clone(d);toast(S.view==='menu'?'Menu saved':'Settings saved');render();break;}
     case 'settings-discard':S.draft=clone(S.config);render();break;
     case 's-del-logo':S.draft.logo='';render();break;
     case 's-add-space':S.draft.spaces.push({id:uid(),name:'New space',seated:0,standing:0,roomFee:0,fbMin:0,buyout:false});render();break;
     case 's-del-space':S.draft.spaces.splice(+el.dataset.i,1);render();break;
-    case 's-add-item':S.draft.catalog.push({id:uid(),name:'New item',category:'Food',unit:'per person',price:0,desc:'',group:''});render();break;
+    case 's-add-item':S.menuQ='';S.menuGroup='all';S.draft.catalog.push({id:uid(),name:'New item',category:'Food',unit:'per person',price:0,desc:'',group:''});render();break;
     case 's-del-item':S.draft.catalog.splice(+el.dataset.i,1);render();break;
   }
 });
@@ -968,6 +984,7 @@ function readLogo(file){
 document.addEventListener('input',e=>{if(e.target.classList&&e.target.classList.contains('desc-box'))e.target.rows=descRows(e.target.value);if(e.target.matches('[data-bind],[data-sbind],[data-slist]'))e.target.dataset.dirty='1';
   if(e.target.dataset.ui==='listQ'){S.listQ=e.target.value;scheduleRender();}
   if(e.target.dataset.ui==='custQ'){S.custQ=e.target.value;scheduleRender();}
+  if(e.target.dataset.ui==='menuQ'){S.menuQ=e.target.value;scheduleRender();}
   if(e.target.dataset.cedit&&S.custEdit&&e.target.type!=='radio'){S.custEdit[e.target.dataset.cedit]=e.target.value;}});
 document.addEventListener('change',e=>{
   const t=e.target;
@@ -1029,7 +1046,7 @@ async function loadAll(){
   if(ev.error){S.dbError=ev.error.message;S.loaded=true;render();return;}
   const m=new Map();(ev.data||[]).forEach(r=>m.set(r.id,rowToEvent(r)));S.events=m;
   if(st.data&&st.data.data&&Object.keys(st.data.data).length)S.config=mergeConfig(st.data.data);
-  if(S.view==='settings')S.draft=clone(S.config);
+  if(S.view==='settings'||S.view==='menu')S.draft=clone(S.config);
   if(!seen){loadSeen();const nl=newLeads();if(nl.length&&!S.leadAlert)announceLead(nl[0]);}
   S.loaded=true;S.stale=false;scheduleRender();
 }
@@ -1043,7 +1060,7 @@ function subscribe(){
       scheduleRender();
     })
     .on('postgres_changes',{event:'*',schema:'public',table:'private_event_settings'},p=>{
-      if(p.new&&p.new.data){S.config=mergeConfig(p.new.data);if(S.view==='settings'&&S.draft&&JSON.stringify(S.draft)===JSON.stringify(S.config))S.draft=clone(S.config);scheduleRender();}
+      if(p.new&&p.new.data){S.config=mergeConfig(p.new.data);if((S.view==='settings'||S.view==='menu')&&S.draft&&JSON.stringify(S.draft)===JSON.stringify(S.config))S.draft=clone(S.config);scheduleRender();}
     })
     .subscribe(st=>{S.stale=(st==='CHANNEL_ERROR'||st==='TIMED_OUT');scheduleRender();});
 }
