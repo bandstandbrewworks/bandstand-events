@@ -548,7 +548,11 @@ function tabDetails(ev,cap){
 }
 function descRows(t){t=String(t||'');return Math.max(1,Math.min(8,Math.ceil(t.length/55)+(t.match(/\n/g)||[]).length))}
 function catalogOptions(){
-  return CATS.map(cat=>{const items=S.config.catalog.filter(i=>i.category===cat);return items.length?`<optgroup label="${esc(cat)}">${items.map(i=>`<option value="${esc(i.id)}" ${S.addItemSel===i.id?'selected':''}>${esc(i.name)} — ${money(i.price)} ${esc(i.unit)}</option>`).join('')}</optgroup>`:''}).join('');
+  // Event packages are grouped by category; regular-menu dishes by their menu section ("group").
+  const map={},order=[];
+  S.config.catalog.forEach(i=>{const g=i.group||i.category;if(!map[g]){map[g]=[];order.push(g)}map[g].push(i)});
+  const groups=[...CATS.filter(c=>map[c]),...order.filter(g=>!CATS.includes(g))];
+  return groups.map(g=>`<optgroup label="${esc(g)}">${map[g].map(i=>`<option value="${esc(i.id)}" ${S.addItemSel===i.id?'selected':''}>${esc(i.name)} — ${money(i.price)} ${esc(i.unit)}</option>`).join('')}</optgroup>`).join('');
 }
 function importedLines(ev,t){
   const b=ev.imported&&ev.imported.breakdown;
@@ -768,8 +772,8 @@ function renderSettings(){
     ${d.spaces.map((s,i)=>`<tr><td>${sIn(`spaces.${i}.name`)}</td><td class="num">${sIn(`spaces.${i}.seated`,'number','80px')}</td><td class="num">${sIn(`spaces.${i}.standing`,'number','80px')}</td><td class="num">${sIn(`spaces.${i}.roomFee`,'number','100px')}</td><td class="num">${sIn(`spaces.${i}.fbMin`,'number','100px')}</td><td><label class="check" for="s-spaces-${i}-buyout"><input type="checkbox" id="s-spaces-${i}-buyout" data-sbind="spaces.${i}.buyout" data-type="bool" ${s.buyout?'checked':''} ${ro}> Buyout</label></td><td class="num"><button class="btn sm danger" data-act="s-del-space" data-i="${i}" ${ro}>Remove</button></td></tr>`).join('')}
     </tbody></table></div></div>
   <div class="panel" style="margin-bottom:16px"><div class="row between" style="margin-bottom:10px"><h3>Menu, packages &amp; rentals</h3><button class="btn sm" data-act="s-add-item" ${ro}>Add item</button></div>
-    <div class="tbl-wrap"><table><thead><tr><th>Name &amp; details</th><th>Category</th><th>Unit</th><th class="num">Price</th><th></th></tr></thead><tbody>
-    ${d.catalog.map((c,i)=>`<tr><td>${sIn(`catalog.${i}.name`)}<textarea class="cell-in desc-box" id="s-catalog-${i}-desc" data-sbind="catalog.${i}.desc" rows="${descRows(c.desc)}" title="${esc(c.desc||'')}" placeholder="Choices / details shown to clients" aria-label="Details" ${ro}>${esc(c.desc||'')}</textarea></td><td><select class="cell-in" id="s-catalog-${i}-category" data-sbind="catalog.${i}.category" aria-label="Category" ${ro}>${CATS.map(x=>`<option ${x===c.category?'selected':''}>${x}</option>`).join('')}</select></td><td><select class="cell-in" id="s-catalog-${i}-unit" data-sbind="catalog.${i}.unit" aria-label="Unit" ${ro}>${UNITS.map(x=>`<option ${x===c.unit?'selected':''}>${x}</option>`).join('')}</select></td><td class="num">${sIn(`catalog.${i}.price`,'number','100px')}</td><td class="num"><button class="btn sm danger" data-act="s-del-item" data-i="${i}" ${ro}>Remove</button></td></tr>`).join('')}
+    <div class="tbl-wrap"><table><thead><tr><th>Name &amp; details</th><th>Menu section</th><th>Category</th><th>Unit</th><th class="num">Price</th><th></th></tr></thead><tbody>
+    ${d.catalog.map((c,i)=>`<tr><td>${sIn(`catalog.${i}.name`)}<textarea class="cell-in desc-box" id="s-catalog-${i}-desc" data-sbind="catalog.${i}.desc" rows="${descRows(c.desc)}" title="${esc(c.desc||'')}" placeholder="Choices / details shown to clients" aria-label="Details" ${ro}>${esc(c.desc||'')}</textarea></td><td>${sIn(`catalog.${i}.group`,'text','150px')}</td><td><select class="cell-in" id="s-catalog-${i}-category" data-sbind="catalog.${i}.category" aria-label="Category" ${ro}>${CATS.map(x=>`<option ${x===c.category?'selected':''}>${x}</option>`).join('')}</select></td><td><select class="cell-in" id="s-catalog-${i}-unit" data-sbind="catalog.${i}.unit" aria-label="Unit" ${ro}>${UNITS.map(x=>`<option ${x===c.unit?'selected':''}>${x}</option>`).join('')}</select></td><td class="num">${sIn(`catalog.${i}.price`,'number','100px')}</td><td class="num"><button class="btn sm danger" data-act="s-del-item" data-i="${i}" ${ro}>Remove</button></td></tr>`).join('')}
     </tbody></table></div></div>
   <div class="panel" style="margin-bottom:16px"><h3>Lists (one per line)</h3><div class="fields">
     ${[['staff','Event managers'],['eventTypes','Event types'],['sources','Lead sources'],['lostReasons','Lost reasons']].map(([k,l])=>`<div class="f"><label for="s-list-${k}">${l}</label><textarea id="s-list-${k}" data-slist="${k}" style="min-height:130px" ${ro}>${esc(d[k].join('\n'))}</textarea></div>`).join('')}
@@ -821,7 +825,7 @@ document.addEventListener('click',e=>{
     case 's-del-logo':S.draft.logo='';render();break;
     case 's-add-space':S.draft.spaces.push({id:uid(),name:'New space',seated:0,standing:0,roomFee:0,fbMin:0,buyout:false});render();break;
     case 's-del-space':S.draft.spaces.splice(+el.dataset.i,1);render();break;
-    case 's-add-item':S.draft.catalog.push({id:uid(),name:'New item',category:'Food',unit:'per person',price:0,desc:''});render();break;
+    case 's-add-item':S.draft.catalog.push({id:uid(),name:'New item',category:'Food',unit:'per person',price:0,desc:'',group:''});render();break;
     case 's-del-item':S.draft.catalog.splice(+el.dataset.i,1);render();break;
   }
 });
