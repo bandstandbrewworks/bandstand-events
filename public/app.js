@@ -36,6 +36,8 @@ const DEFAULT_CONFIG={
   autoReplySubject:'Thanks for reaching out to Bandstand Brew Works!',
   autoReplyBody:"Hi {first_name},\n\nThank you for reaching out to Bandstand Brew Works about your {event_type} on {date}! We received your request for {guests} guests, and our events team will be in touch within one business day to talk through spaces, menus and availability.\n\nIf you have questions in the meantime, just reply to this email.\n\nCheers,\nThe Bandstand Brew Works events team\n3922 Main St, Warrensburg, NY\nWhere Community Gathers",
   leadAlertTo:'erin@bandstandbrewworks.com', replyTo:'erin@bandstandbrewworks.com',
+  beoReminderOn:true, beoReminderHours:36,
+  beoReminderTo:'erin@bandstandbrewworks.com, deane@bandstandbrewworks.com, adam@bandstandbrewworks.com, laurie@bandstandbrewworks.com, darby@bandstandbrewworks.com',
   staff:['Laurie','Darby','Adam'],
   eventTypes:['Private party','Corporate','Wedding / rehearsal','Birthday','Fundraiser','Holiday party','Ticketed show','Other'],
   sources:['Website form','Phone','Email','Walk-in','Repeat client','Referral','Social media'],
@@ -648,7 +650,8 @@ function tabBEO(ev,t){
   const tl=(ev.beo.timeline||[]).map((r,i)=>`<tr><td style="width:130px"><input class="cell-in" type="time" id="tl-${i}-time" data-bind="beo.timeline.${i}.time" value="${esc(r.time)}" aria-label="Time" ${ro}></td><td><input class="cell-in" type="text" id="tl-${i}-desc" data-bind="beo.timeline.${i}.desc" value="${esc(r.desc)}" aria-label="What happens" ${ro}></td><td class="num" style="width:80px"><button class="btn sm danger" data-act="del-tl" data-i="${i}" ${ro}>Remove</button></td></tr>`).join('');
   const fb=(ev.items||[]);
   return `<div class="row between" style="margin-bottom:12px"><p class="muted" style="margin:0">The BEO is the run sheet for the kitchen, bar and stage crew. Edit it here; it uses the proposal's menu automatically.</p>
-    <div class="row"><button class="btn" data-act="tl-template" ${ro}>Fill standard timeline</button><button class="btn primary" data-act="copy-beo">Copy BEO as text</button></div></div>
+    <div class="row"><button class="btn" data-act="tl-template" ${ro}>Fill standard timeline</button><button class="btn" data-act="email-beo" ${S.beoSending?'disabled':''}>${S.beoSending?'Sending…':'Email BEO to team'}</button><button class="btn primary" data-act="copy-beo">Copy BEO as text</button></div></div>
+  ${ev.beoReminder&&ev.beoReminder.status==='sent'?`<p class="muted" style="margin:-4px 0 12px;font-size:12px">Automatic reminder sent ${esc(fmtTS(ev.beoReminder.at))}.</p>`:''}
   ${S.beoText!=null?`<div class="panel" style="margin-bottom:12px"><label for="beo-text">Copy didn’t work here. Select all and copy:</label><textarea id="beo-text" readonly style="min-height:200px;font-family:ui-monospace,monospace;font-size:12px">${esc(S.beoText)}</textarea></div>`:''}
   <div class="sheet">
     <div class="sheet-head"><div>${docBrand('Banquet Event Order')}</div><div style="text-align:right"><b>${esc(ev.title)}</b><div><span class="pill ${sc(ev.status)}">${ev.status}</span></div></div></div>
@@ -798,6 +801,13 @@ function renderEmailSettings(d,ro){
   <div class="row" style="margin-top:10px;flex-wrap:wrap">
     <button class="btn" data-act="mail-test" ${S.mailTesting?'disabled':''}>${S.mailTesting?'Sending…':'Send me a test auto-reply'}</button>
     ${perm==='default'?'<button class="btn" data-act="notif-on">Turn on desktop alerts on this computer</button>':perm==='granted'?'<span class="flag ok">Desktop alerts on for this computer</span>':''}
+  </div></div>
+  <div class="panel" style="margin-bottom:16px"><h3>Pre-event BEO email</h3>
+  <p class="muted" style="margin-top:0;font-size:13px">Before each Tentative or Definite event, the team gets an email with the event details and the latest BEO. It goes out once, from the same Gmail account as the lead emails. To resend after changes, use <b>Email BEO to team</b> on the event’s BEO tab.</p>
+  <div class="fields">
+    <div class="f"><span class="lbl">Reminder</span><label class="check" for="s-beoReminderOn"><input type="checkbox" id="s-beoReminderOn" data-sbind="beoReminderOn" data-type="bool" ${d.beoReminderOn!==false?'checked':''} ${ro}> Send automatically</label></div>
+    <div class="f"><label for="s-beoReminderHours">Hours before the event</label><input class="cell-in" id="s-beoReminderHours" type="number" min="1" max="336" step="1" data-type="num" data-sbind="beoReminderHours" value="${esc(d.beoReminderHours==null?36:d.beoReminderHours)}" ${ro}></div>
+    <div class="f wide"><label for="s-beoReminderTo">Send to (separate with commas)</label><textarea id="s-beoReminderTo" data-sbind="beoReminderTo" style="min-height:60px" ${ro}>${esc(d.beoReminderTo||'')}</textarea></div>
   </div></div>`;
 }
 async function loadMailStatus(){
@@ -819,6 +829,19 @@ function gmailReturnNotice(){
   if(!q.has('gmail')&&!q.has('gmail_error'))return;
   setTimeout(()=>toast(q.has('gmail')?'Gmail connected. New-lead emails will send from it.':'Gmail not connected: '+q.get('gmail_error')),300);
   try{history.replaceState(null,'',location.pathname+location.hash)}catch(e){}
+}
+async function emailBeo(id){
+  if(S.beoSending)return;
+  const ev=S.events.get(id);if(!ev)return;
+  S.beoSending=true;render();
+  try{
+    await (chains['ev:'+id]||Promise.resolve()); // make sure the latest edits are saved first
+    const {data:{session}}=await sb.auth.getSession();
+    const r=await fetch('/api/beo-reminder',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+(session&&session.access_token||'')},body:JSON.stringify({id})});
+    const j=await r.json().catch(()=>({}));
+    toast(r.ok?(j.lines&&j.lines[0]||'BEO emailed'):'BEO not sent: '+(j.error||(j.lines||[]).join(' ')||r.status));
+  }catch(e){toast('BEO not sent: '+e.message);}
+  S.beoSending=false;render();
 }
 async function sendTestMail(){
   S.mailTesting=true;render();
@@ -876,6 +899,7 @@ document.addEventListener('click',e=>{
   switch(act){
     case 'nav':go(el.dataset.view);break;
     case 'mail-test':sendTestMail();break;
+    case 'email-beo':emailBeo(S.eventId);break;
     case 'gmail-connect':gmailConnect();break;
     case 'gmail-disconnect':gmailDisconnect();break;
     case 'notif-on':if('Notification' in window)Notification.requestPermission().then(()=>render());break;
