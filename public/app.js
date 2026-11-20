@@ -234,7 +234,7 @@ function renderSide(){
   status=S.stale?'<span class="dotline"><i class="off"></i>Can’t reach the database</span>':'<span class="dotline"><i></i>Live · saved to Supabase</span>';
   if(S.email) status+=`<span>${esc(S.email)}</span><button class="link" data-act="sign-out" style="text-align:left;color:var(--gold)">Sign out</button>`;
   const l=logoSrc();
-  return `${l?`<div class="brand-logo"><img src="${l}" alt="${esc(S.config.venueName)}"></div>`:`<div class="brand">${esc(S.config.venueName)}</div>`}<div style="padding:0 8px;margin-top:-6px"><div class="tagline">${esc(S.config.tagline||'')}</div><div class="brand"><small>PRIVATE EVENTS</small></div></div>
+  return `${l?`<div class="brand-logo"><img src="${l}" alt="${esc(S.config.venueName)}"></div>`:`<div class="brand">${esc(S.config.venueName)}</div>`}<div class="app-id"><span class="app-name">Private Events</span><span class="app-sub">${esc(S.config.venueName||'Bandstand Brew Works')}</span></div>
   <button class="side-new" data-act="new-event">+ New event</button>
   <nav aria-label="Sections">${nav.map(([v,l,n])=>`<button class="nav-btn ${on===v?'on':''}" data-act="nav" data-view="${v}"><span>${l}${v==='pipeline'&&nl?` <span class="newpill">${nl} new</span>`:''}</span><span class="n">${n}</span></button>`).join('')}</nav>
   <div class="side-foot">${status}${S.readOnly?'<span>View-only access</span>':''}</div>`;
