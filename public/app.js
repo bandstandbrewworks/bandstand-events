@@ -196,7 +196,7 @@ function leadAlertHtml(){
 /* ---------- routing ---------- */
 function go(view,id){
   S.view=view; S.eventId=id||null; S.delArm=false; if(view==='event')markSeen(id); S.beoText=null; S.toastText=null;
-  if(view==='settings'||view==='menu') S.draft=clone(S.config);
+  if(isDraftView(view)) S.draft=clone(S.config);
   if(view==='inquiry') S.inquiryDone=null;
   const h=view==='event'?'event-'+id:view==='customer'?'customer-'+encodeURIComponent(id):view;
   try{ if(location.hash.slice(1)!==h) location.hash=h; }catch(e){}
@@ -206,7 +206,7 @@ function fromHash(){
   let h='';try{h=location.hash.slice(1)}catch(e){}
   if(h.startsWith('event-')){S.view='event';S.eventId=h.slice(6);markSeen(S.eventId);}
   else if(h.startsWith('customer-')){S.view='customer';try{S.eventId=decodeURIComponent(h.slice(9))}catch(e){S.eventId=h.slice(9)}}
-  else if(['pipeline','calendar','events','customers','reports','import','inquiry','menu','settings'].includes(h)){S.view=h;if(h==='settings'||h==='menu')S.draft=clone(S.config);}
+  else if(['pipeline','calendar','events','customers','reports','import','inquiry','menu','library','settings'].includes(h)){S.view=h;if(isDraftView(h))S.draft=clone(S.config);}
 }
 window.addEventListener('hashchange',()=>{fromHash();render()});
 
@@ -220,14 +220,14 @@ function render(){
   const st=main.scrollTop;
   document.getElementById('app').classList.toggle('noside',S.auth!=='ok');
   document.getElementById('side').innerHTML=S.auth==='ok'?renderSide():'';
-  main.innerHTML=renderMain()+leadAlertHtml();
+  main.innerHTML=renderMain()+leadAlertHtml()+mailAlertHtml();
   main.scrollTop=st;
   if(keep){const el=document.getElementById(keep.id);if(el){if(keep.dirty&&el.type!=='checkbox'){el.value=keep.value;el.dataset.dirty='1';}el.focus({preventScroll:true});try{el.setSelectionRange(keep.s,keep.e)}catch(e){}}}
 }
 function renderSide(){
   const evs=evList();
   const open=evs.filter(e=>e.status==='Lead'||e.status==='Proposal Sent').length;
-  const nav=[['pipeline','Pipeline',open],['calendar','Calendar',''],['events','All events',evs.length||''],['customers','Customers',customers().length||''],['reports','Reports',''],['import','Import',''],['inquiry','Website form',''],['menu','Menu & packages',S.config.catalog.length||''],['settings','Settings','']];
+  const nav=[['pipeline','Pipeline',open],['calendar','Calendar',''],['events','All events',evs.length||''],['customers','Customers',customers().length||''],['reports','Reports',''],['import','Import',''],['inquiry','Website form',''],['menu','Menu & packages',S.config.catalog.length||''],['library','Templates & docs',''],['settings','Settings','']];
   const on=S.view==='event'?'':S.view==='customer'?'customers':S.view;
   const nl=newLeads().length;
   let status;
@@ -252,6 +252,7 @@ function renderMain(){
     case 'inquiry':return renderInquiry();
     case 'settings':return renderSettings();
     case 'menu':return renderMenu();
+    case 'library':return renderLibrary();
     case 'event':return renderDetail();
     default:return renderPipeline();
   }
@@ -267,7 +268,7 @@ function card(e){
   const t=totals(e), conf=conflicts(e).some(c=>c.hold);
   const due=e.followUp&&ACTIVE.includes(e.status)&&e.status!=='Definite'&&e.followUp<=todayISO();
   return `<article class="card ${sc(e.status)}" draggable="true" data-drag="${esc(e.id)}" data-act="open-event" data-id="${esc(e.id)}" tabindex="0" role="button" aria-label="Open ${esc(e.title)}">
-    <div class="row between"><span class="meta">${esc(fmtShort(e.date))}${e.start?' · '+esc(fmtTime(e.start)):''}</span><span>${isNewLead(e)?'<span class="flag ok">New</span> ':''}${conf?'<span class="flag">Conflict</span>':(()=>{const p=queuePos(e);return p===1?'<span class="flag ok">1st right</span>':p>1?`<span class="flag warn">${ordinal(p)} in line</span>`:''})()}</span></div>
+    <div class="row between"><span class="meta">${esc(fmtShort(e.date))}${e.start?' · '+esc(fmtTime(e.start)):''}</span><span>${isNewLead(e)?'<span class="flag ok">New</span> ':''}${unreadReplies(e.id)?'<span class="flag warn">New reply</span> ':''}${conf?'<span class="flag">Conflict</span>':(()=>{const p=queuePos(e);return p===1?'<span class="flag ok">1st right</span>':p>1?`<span class="flag warn">${ordinal(p)} in line</span>`:''})()}</span></div>
     <h4>${esc(e.title||'Untitled event')}</h4>
     <div class="meta">${esc(e.client&&e.client.name||'No contact yet')} · ${num(e.guests)} guests</div>
     ${(e.spaceIds||[]).length?`<div class="chips">${e.spaceIds.map(id=>`<span class="chip">${esc(spaceName(id))}</span>`).join('')}</div>`:''}
@@ -550,7 +551,7 @@ function renderDetail(){
   const ev=S.events.get(S.eventId);
   if(!ev) return `<div class="page-head"><div><h1>Event not found</h1><p>It may have been deleted.</p></div></div><button class="btn" data-act="nav" data-view="pipeline">Back to pipeline</button>`;
   const t=totals(ev), conf=conflicts(ev);
-  const tabs=[['details','Details'],['proposal','Proposal'],['beo','BEO'],['contract','Contract & payments'],['client','Client view'],['activity','Activity']];
+  const tabs=[['details','Details'],['emails',emailTabLabel(ev)],['proposal','Proposal'],['beo','BEO'],['contract','Contract & payments'],['client','Client view'],['activity','Activity']];
   let banner='';
   if(conf.length){
     const hard=conf.filter(c=>c.hold), q=requestQueue(ev), pos=q.findIndex(e=>e.id===ev.id)+1, first=q[0];
@@ -569,6 +570,7 @@ function renderDetail(){
     case 'contract':body=tabContract(ev,t);break;
     case 'client':body=tabClient(ev,t);break;
     case 'activity':body=tabActivity(ev);break;
+    case 'emails':body=tabEmails(ev);break;
     default:body=tabDetails(ev,cap);
   }
   return `${staleBanner()}<button class="link" data-act="back" style="margin-bottom:10px">‹ Back</button>
@@ -935,6 +937,7 @@ document.addEventListener('click',e=>{
   const el=e.target.closest('[data-act]'); if(!el) return;
   if(el.dataset.act==='cal-new'&&e.target.closest('.ev-chip')) return;
   const act=el.dataset.act, ev=S.events.get(S.eventId);
+  if(mailAct(act,el,ev))return;
   switch(act){
     case 'nav':go(el.dataset.view);break;
     case 'mail-test':sendTestMail();break;
@@ -981,7 +984,7 @@ document.addEventListener('click',e=>{
     case 'unsign':mutate(ev.id,x=>{x.contract.signedAt='';x.contract.signedName=''},'Signature cleared');break;
     case 'del-pay':{const p=ev.payments.find(p=>p.id===el.dataset.pid);mutate(ev.id,x=>{x.payments=x.payments.filter(q=>q.id!==el.dataset.pid)},p?`Removed ${p.kind} of ${money(p.amount)}`:'Removed payment');break;}
     case 'inquiry-again':S.inquiryDone=null;render();break;
-    case 'settings-save':{const d=clone(S.draft);d.spaces=d.spaces.filter(s=>String(s.name).trim());d.catalog=d.catalog.filter(c=>String(c.name).trim());persistConfig(d);S.draft=clone(d);toast(S.view==='menu'?'Menu saved':'Settings saved');render();break;}
+    case 'settings-save':{const d=clone(S.draft);d.spaces=d.spaces.filter(s=>String(s.name).trim());d.catalog=d.catalog.filter(c=>String(c.name).trim());persistConfig(d);S.draft=clone(d);toast(S.view==='menu'?'Menu saved':S.view==='library'?'Templates saved':'Settings saved');render();break;}
     case 'settings-discard':S.draft=clone(S.config);render();break;
     case 's-del-logo':S.draft.logo='';render();break;
     case 's-add-space':S.draft.spaces.push({id:uid(),name:'New space',seated:0,standing:0,roomFee:0,fbMin:0,buyout:false});render();break;
@@ -1067,16 +1070,18 @@ function renderAuth(){
     <button class="btn primary" type="submit">Sign in</button>
     <p class="muted" style="font-size:12px;margin:0">Forgot your password? Reset it from the memberships app’s sign-in page.</p></form>`);
 }
-function mergeConfig(d){const c=Object.assign(clone(DEFAULT_CONFIG),d||{});['spaces','catalog','staff','eventTypes','sources','lostReasons'].forEach(k=>{if(!Array.isArray(c[k]))c[k]=clone(DEFAULT_CONFIG[k])});return c}
+function isDraftView(v){return v==='settings'||v==='menu'||v==='library'}
+function mergeConfig(d){const c=Object.assign(clone(DEFAULT_CONFIG),d||{});['spaces','catalog','staff','eventTypes','sources','lostReasons','emailTemplates'].forEach(k=>{if(!Array.isArray(c[k]))c[k]=clone(DEFAULT_CONFIG[k]||[])});return c}
 function rowToEvent(r){S.tokens[r.id]=r.client_token;if(r.beo_token)(S.beoTokens=S.beoTokens||{})[r.id]=r.beo_token;return Object.assign(clone(r.data||{}),{id:r.id})}
 async function loadAll(){
   const [ev,st]=await Promise.all([sb.from('private_events').select('id,data,client_token,beo_token'),sb.from('private_event_settings').select('data').eq('id','main').maybeSingle()]);
   if(ev.error){S.dbError=ev.error.message;S.loaded=true;render();return;}
   const m=new Map();(ev.data||[]).forEach(r=>m.set(r.id,rowToEvent(r)));S.events=m;
   if(st.data&&st.data.data&&Object.keys(st.data.data).length)S.config=mergeConfig(st.data.data);
-  if(S.view==='settings'||S.view==='menu')S.draft=clone(S.config);
+  if(isDraftView(S.view))S.draft=clone(S.config);
   if(!seen){loadSeen();const nl=newLeads();if(nl.length&&!S.leadAlert)announceLead(nl[0]);}
   S.loaded=true;S.stale=false;scheduleRender();
+  mailAfterLoad();
 }
 let channel=null;
 function subscribe(){
@@ -1088,8 +1093,10 @@ function subscribe(){
       scheduleRender();
     })
     .on('postgres_changes',{event:'*',schema:'public',table:'private_event_settings'},p=>{
-      if(p.new&&p.new.data){S.config=mergeConfig(p.new.data);if((S.view==='settings'||S.view==='menu')&&S.draft&&JSON.stringify(S.draft)===JSON.stringify(S.config))S.draft=clone(S.config);scheduleRender();}
+      if(p.new&&p.new.data){S.config=mergeConfig(p.new.data);if(isDraftView(S.view)&&S.draft&&JSON.stringify(S.draft)===JSON.stringify(S.config))S.draft=clone(S.config);scheduleRender();}
     })
+    .on('postgres_changes',{event:'INSERT',schema:'public',table:'private_event_emails'},p=>mailRealtime(p))
+    .on('postgres_changes',{event:'*',schema:'public',table:'private_event_documents'},()=>docsRealtime())
     .subscribe(st=>{S.stale=(st==='CHANNEL_ERROR'||st==='TIMED_OUT');scheduleRender();});
 }
 async function afterLogin(){

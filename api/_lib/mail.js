@@ -25,7 +25,7 @@ function mailer() {
 }
 const fromName = () => process.env.EMAIL_FROM_NAME || 'Bandstand Brew Works Events';
 
-async function send({ to, subject, text, replyTo }, m) {
+async function send({ to, subject, text, replyTo, eventId }, m) {
   m = m || await pickMailer();
   if (!m) throw new Error('Email sending is not set up yet');
   const clean = s => String(s || '').replace(/[\r\n]+/g, ' ').trim();
@@ -33,7 +33,7 @@ async function send({ to, subject, text, replyTo }, m) {
     const r = await fetch(`${MEMBERSHIPS_URL}/api/events-email/send`, {
       method: 'POST',
       headers: { 'x-mail-secret': process.env.MEMBERSHIPS_MAIL_SECRET, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ to, subject: clean(subject), text, replyTo: replyTo || '', fromName: fromName() })
+      body: JSON.stringify({ to, subject: clean(subject), text, replyTo: replyTo || '', fromName: fromName(), eventId: eventId || undefined })
     });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(j.error || 'Gmail send failed (' + r.status + ')');

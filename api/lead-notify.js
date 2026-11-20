@@ -72,7 +72,7 @@ async function handleLead(id, secret) {
   else if (!guest) autoReplyLine = 'Auto-reply not sent: no email address.';
   else {
     try {
-      await send({ to: guest, subject: fill(cfg.autoReplySubject, ev, cfg), text: fill(cfg.autoReplyBody, ev, cfg), replyTo }, m);
+      await send({ to: guest, subject: fill(cfg.autoReplySubject, ev, cfg), text: fill(cfg.autoReplyBody, ev, cfg), replyTo, eventId: id }, m);
       autoReplyLine = `Auto-reply sent to ${guest}.`;
     } catch (e) { autoReplyLine = `Auto-reply to ${guest} failed: ${e.message}`; failed = true; }
   }

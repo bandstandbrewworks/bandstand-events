@@ -224,3 +224,12 @@ body.public-page{background:var(--bg);display:block;height:auto;min-height:100%}
 .day.has-req{box-shadow:inset 0 0 0 2px var(--s-prop)}
 tr.sec-head th{background:var(--surface-2);font-family:'Barlow Condensed',sans-serif;font-size:17px;letter-spacing:.03em;text-transform:uppercase;color:var(--ink);padding:14px 10px 8px;border-top:2px solid var(--ink)}
 tr.sec-head th .muted{font-family:'IBM Plex Sans',sans-serif;font-size:12px;text-transform:none;letter-spacing:0;font-weight:400}
+.msg{border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-top:8px;background:var(--surface)}
+.msg.in{border-left:4px solid var(--accent);background:var(--surface-2)}
+.msg.out{border-left:4px solid var(--line)}
+.msg-body{white-space:pre-wrap;margin-top:6px;font-size:14px;line-height:1.5;overflow-wrap:anywhere}
+.chip{display:inline-block;font-size:12px;padding:2px 8px;border:1px solid var(--line);border-radius:12px;background:var(--surface-2)}
+.doc-pick{display:flex;flex-wrap:wrap;gap:6px 16px}
+.doc-pick .check{font-size:13px}
+.tpl-card{border:1px solid var(--line);border-radius:8px;padding:12px;margin-top:12px}
+label.btn input[hidden]{display:none}
