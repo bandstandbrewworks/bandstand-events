@@ -622,7 +622,7 @@ function totalsBlock(t,ev){
     ${importedLines(ev,t)}
     <span class="t">Total</span><span class="t">${money(t.total)}</span>
     <span>Deposit</span><span>${money(t.depositDue)}</span>
-  </div><p class="muted" style="font-size:12px;text-align:right;margin:6px 0 0">Imported from Tripleseat. Adding a menu item here switches this event to Bandstand pricing.</p>`;
+  </div><p class="muted" style="font-size:12px;text-align:right;margin:6px 0 0">Totals imported from Tripleseat${(ev.items||[]).length?'; the menu lines above were copied from Tripleseat for reference':''}. Adding, removing or changing a menu line switches this event to Bandstand pricing.</p>`;
   return `<div class="totals">
     <span>Food &amp; beverage</span><span>${money(t.fb)}</span>
     ${t.shortfall?`<span>F&amp;B minimum shortfall (min ${money0(t.fbMin)})</span><span>${money(t.shortfall)}</span>`:''}
@@ -662,7 +662,7 @@ function beoText(ev,t){
   const L=[];
   L.push(`BANQUET EVENT ORDER — ${S.config.venueName}`,`${ev.title} (${ev.status})`,`${fmtDate(ev.date,true)} · ${fmtTime(ev.start)}–${fmtTime(ev.end)}`,`Guests: ${num(ev.guests)} · Space: ${(ev.spaceIds||[]).map(spaceName).join(', ')}`,`Contact: ${ev.client.name} ${ev.client.phone} ${ev.client.email}`,`Event manager: ${ev.owner||'—'}`,'');
   L.push('TIMELINE');(ev.beo.timeline||[]).forEach(r=>L.push(`  ${fmtTime(r.time)}  ${r.desc}`));L.push('');
-  L.push('FOOD & BEVERAGE');(ev.items||[]).forEach(i=>L.push(`  ${num(i.qty)} × ${i.name} [${i.category}]${i.desc?'\n      '+i.desc:''}`));L.push('');
+  L.push('FOOD & BEVERAGE');(ev.items||[]).forEach(i=>L.push(`  ${qtyLabel(i.qty)} × ${i.name} [${i.category}]${i.desc?'\n      '+i.desc:''}`));L.push('');
   [['SETUP / FLOOR PLAN','setup'],['MUSIC / STAGE / AV','music'],['BAR','bar'],['KITCHEN','kitchen'],['ALLERGIES & DIETARY','allergies'],['STAFFING','staffing']].forEach(([h,k])=>{if(ev.beo[k]){L.push(h,'  '+ev.beo[k].replace(/\n/g,'\n  '),'')}});
   L.push(`Est. total ${money(t.total)} · Paid ${money(t.paid)} · Balance ${money(t.balance)}`);
   return L.join('\n');
@@ -679,7 +679,7 @@ function tabBEO(ev,t){
     <div class="sheet-head"><div>${docBrand('Banquet Event Order')}</div><div style="text-align:right"><b>${esc(ev.title)}</b><div><span class="pill ${sc(ev.status)}">${ev.status}</span></div></div></div>
     <div class="kv"><div><span>Date</span>${esc(fmtDate(ev.date,true))}</div><div><span>Time</span>${esc(fmtTime(ev.start))}–${esc(fmtTime(ev.end))}</div><div><span>Guests</span>${num(ev.guests)}</div><div><span>Space</span>${esc((ev.spaceIds||[]).map(spaceName).join(', ')||'—')}</div><div><span>Contact</span>${esc(ev.client.name||'—')}<br><span style="text-transform:none;letter-spacing:0;font-weight:400">${esc(ev.client.phone)}</span></div><div><span>Event manager</span>${esc(ev.owner||'—')}</div></div>
     <section><div class="row between"><h3 style="flex:1">Timeline</h3><button class="btn sm" data-act="add-tl" ${ro}>Add row</button></div><table><tbody>${tl||'<tr><td class="empty">No timeline yet. Use “Fill standard timeline” or add rows.</td></tr>'}</tbody></table></section>
-    <section><h3>Food &amp; beverage</h3>${fb.length?`<table><tbody>${fb.map(i=>`<tr><td class="num" style="width:60px">${num(i.qty)}</td><td>${esc(i.name)}${i.desc?`<div class="muted" style="font-size:12px;white-space:pre-line">${esc(i.desc)}</div>`:''}</td><td class="muted">${esc(i.category)}</td></tr>`).join('')}</tbody></table>`:'<p class="muted">Add items on the Proposal tab.</p>'}</section>
+    <section><h3>Food &amp; beverage</h3>${fb.length?`<table><tbody>${fb.map(i=>`<tr><td class="num" style="width:60px">${qtyLabel(i.qty)}</td><td>${esc(i.name)}${i.desc?`<div class="muted" style="font-size:12px;white-space:pre-line">${esc(i.desc)}</div>`:''}</td><td class="muted">${esc(i.category)}</td></tr>`).join('')}</tbody></table>`:'<p class="muted">Add items on the Proposal tab.</p>'}</section>
     <div class="fields">
       ${txt(ev,'Setup / floor plan','beo.setup','Tables, linens, stage layout, coat check')}
       ${txt(ev,'Music / stage / AV','beo.music','Band or DJ, load-in time, sound check, mics, projector')}
@@ -964,9 +964,9 @@ document.addEventListener('click',e=>{
     case 'cal-today':S.calMonth=new Date(new Date().getFullYear(),new Date().getMonth(),1);render();break;
     case 'cal-new':{if(S.readOnly)return;const sp=S.calSpace!=='all'?[S.calSpace]:[];const n=newEvent({date:el.dataset.date,spaceIds:sp});if(sp.length)applySpacePricing(n);logAct(n,'Event created from calendar');persistEvent(n);S.tab='details';go('event',n.id);break;}
     case 'delete-event':if(!S.delArm){S.delArm=true;render();}else{removeEvent(S.eventId);toast('Event deleted');go('pipeline');}break;
-    case 'add-item':{const id=document.getElementById('add-cat-item').value||S.addItemSel;const c=S.config.catalog.find(x=>x.id===id);if(!c)return;mutate(ev.id,x=>{x.items.push({id:uid(),name:c.name,category:c.category,unit:c.unit,price:num(c.price),desc:c.desc||'',qty:defaultQty(x,c.unit)})},'Added '+c.name);break;}
+    case 'add-item':{const id=document.getElementById('add-cat-item').value||S.addItemSel;const c=S.config.catalog.find(x=>x.id===id);if(!c)return;mutate(ev.id,x=>{x.itemsEdited=true;x.items.push({id:uid(),name:c.name,category:c.category,unit:c.unit,price:num(c.price),desc:c.desc||'',qty:defaultQty(x,c.unit)})},'Added '+c.name);break;}
     case 'add-custom':mutate(ev.id,x=>x.items.push({id:uid(),name:'Custom item',category:'Other',unit:'flat',price:0,qty:1}));setTimeout(()=>{const f=document.getElementById('it-'+(ev.items.length)+'-name');if(f){f.focus();f.select()}},30);break;
-    case 'del-item':{const i=+el.dataset.i;const nm=ev.items[i]&&ev.items[i].name;mutate(ev.id,x=>x.items.splice(i,1),'Removed '+nm);break;}
+    case 'del-item':{const i=+el.dataset.i;const nm=ev.items[i]&&ev.items[i].name;mutate(ev.id,x=>{x.items.splice(i,1);x.itemsEdited=true;},'Removed '+nm);break;}
     case 'sync-qty':{const i=+el.dataset.i;mutate(ev.id,x=>{x.items[i].qty=defaultQty(x,x.items[i].unit)});break;}
     case 'space-pricing':mutate(ev.id,x=>applySpacePricing(x),'Applied space pricing');break;
     case 'add-tl':mutate(ev.id,x=>{x.beo.timeline=x.beo.timeline||[];x.beo.timeline.push({time:'',desc:''})});break;
@@ -1026,7 +1026,7 @@ document.addEventListener('change',e=>{
     const before=getPath(S.events.get(S.eventId),path);
     if(before===v)return;
     const labels={'date':'Date','start':'Start time','end':'End time','guests':'Guest count','title':'Event name','owner':'Event manager','lostReason':'Lost reason','roomFee':'Room fee','fbMinimum':'F&B minimum'};
-    mutate(S.eventId,x=>setPath(x,path,v),labels[path]?`${labels[path]} changed to ${v||'(blank)'}`:null);
+    mutate(S.eventId,x=>{setPath(x,path,v);if(/^items\./.test(path))x.itemsEdited=true;},labels[path]?`${labels[path]} changed to ${v||'(blank)'}`:null);
     return;
   }
   if(t.dataset.sbind&&S.draft){delete t.dataset.dirty;let v=t.type==='checkbox'?t.checked:t.value;if(t.dataset.type==='num')v=num(v);setPath(S.draft,t.dataset.sbind,v);scheduleRender();return;}

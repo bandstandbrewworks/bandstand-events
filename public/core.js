@@ -25,9 +25,11 @@ function sc(status){return 's-'+(SKEY[status]||'lead')}
 function linesFrom(s){return String(s||'').split(/\n|,/).map(x=>x.trim()).filter(Boolean)}
 const USD=new Intl.NumberFormat('en-US',{style:'currency',currency:'USD'});
 const USD0=new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:0});
+function qtyLabel(q){const n=num(q);return n?String(n):'—'}
 function totals(ev){
-  // Events imported from Tripleseat keep Tripleseat's totals until someone adds menu items here.
-  if(ev.imported&&ev.imported.grandTotal!=null&&!(ev.items||[]).length){
+  // Events imported from Tripleseat keep Tripleseat's totals until someone changes the menu here
+  // (the menu lines copied from Tripleseat are marked ts and are for reference).
+  if(ev.imported&&ev.imported.grandTotal!=null&&!ev.itemsEdited&&(ev.items||[]).every(i=>i.ts)){
     const total=r2(num(ev.imported.grandTotal)),actual=r2(num(ev.imported.actual));
     const paid=r2((ev.payments||[]).reduce((a,p)=>a+(p.kind==='refund'?-num(p.amount):num(p.amount)),0));
     const depositDue=r2(num(ev.imported.deposit));

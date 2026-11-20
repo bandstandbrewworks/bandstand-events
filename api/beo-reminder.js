@@ -49,7 +49,7 @@ function beoEmail(ev, cfg, hours, C) {
   if (tl.length) tl.forEach(r => L.push(`  ${C.fmtTime(r.time) || '—'}  ${r.desc || ''}`)); else L.push('  (no timeline entered)');
   L.push('', 'FOOD & BEVERAGE');
   const items = ev.items || [];
-  if (items.length) items.forEach(i => L.push(`  ${C.num(i.qty)} × ${i.name} [${i.category}]${i.desc ? '\n      ' + String(i.desc).replace(/\n/g, '\n      ') : ''}`));
+  if (items.length) items.forEach(i => L.push(`  ${C.num(i.qty) || '—'} × ${i.name} [${i.category}]${i.desc ? '\n      ' + String(i.desc).replace(/\n/g, '\n      ') : ''}`));
   else L.push('  (no menu items entered)');
   [['SETUP / FLOOR PLAN', 'setup'], ['MUSIC / STAGE / AV', 'music'], ['BAR', 'bar'], ['KITCHEN', 'kitchen'], ['ALLERGIES & DIETARY', 'allergies'], ['STAFFING', 'staffing']]
     .forEach(([h, k]) => { if (beo[k]) L.push('', h, '  ' + String(beo[k]).replace(/\n/g, '\n  ')); });
