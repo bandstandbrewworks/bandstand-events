@@ -681,12 +681,12 @@ function tabBEO(ev,t){
     <section><div class="row between"><h3 style="flex:1">Timeline</h3><button class="btn sm" data-act="add-tl" ${ro}>Add row</button></div><table><tbody>${tl||'<tr><td class="empty">No timeline yet. Use “Fill standard timeline” or add rows.</td></tr>'}</tbody></table></section>
     <section><h3>Food &amp; beverage</h3>${fb.length?`<table><tbody>${fb.map(i=>`<tr><td class="num" style="width:60px">${qtyLabel(i.qty)}</td><td>${esc(i.name)}${i.desc?`<div class="muted" style="font-size:12px;white-space:pre-line">${esc(i.desc)}</div>`:''}</td><td class="muted">${esc(i.category)}</td></tr>`).join('')}</tbody></table>`:'<p class="muted">Add items on the Proposal tab.</p>'}</section>
     <div class="fields">
-      ${txt(ev,'Setup / floor plan','beo.setup','Tables, linens, stage layout, coat check')}
-      ${txt(ev,'Music / stage / AV','beo.music','Band or DJ, load-in time, sound check, mics, projector')}
-      ${txt(ev,'Bar','beo.bar','Package, kegs to tap, cut-off time, tab instructions')}
-      ${txt(ev,'Kitchen','beo.kitchen','Service style, timing, plating notes')}
-      ${txt(ev,'Allergies &amp; dietary','beo.allergies','Count of vegetarian, gluten-free, allergies')}
-      ${txt(ev,'Staffing','beo.staffing','Bartenders, servers, door, sound engineer')}
+      ${txt(ev,'Setup / floor plan','beo.setup','')}
+      ${txt(ev,'Music / stage / AV','beo.music','')}
+      ${txt(ev,'Bar','beo.bar','')}
+      ${txt(ev,'Kitchen','beo.kitchen','')}
+      ${txt(ev,'Allergies &amp; dietary','beo.allergies','')}
+      ${txt(ev,'Staffing','beo.staffing','')}
     </div>
   </div>`;
 }
