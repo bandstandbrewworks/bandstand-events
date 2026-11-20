@@ -672,7 +672,7 @@ function tabBEO(ev,t){
   const tl=(ev.beo.timeline||[]).map((r,i)=>`<tr><td style="width:130px"><input class="cell-in" type="time" id="tl-${i}-time" data-bind="beo.timeline.${i}.time" value="${esc(r.time)}" aria-label="Time" ${ro}></td><td><input class="cell-in" type="text" id="tl-${i}-desc" data-bind="beo.timeline.${i}.desc" value="${esc(r.desc)}" aria-label="What happens" ${ro}></td><td class="num" style="width:80px"><button class="btn sm danger" data-act="del-tl" data-i="${i}" ${ro}>Remove</button></td></tr>`).join('');
   const fb=(ev.items||[]);
   return `<div class="row between" style="margin-bottom:12px"><p class="muted" style="margin:0">The BEO is the run sheet for the kitchen, bar and stage crew. Edit it here; it uses the proposal's menu automatically.</p>
-    <div class="row"><button class="btn" data-act="tl-template" ${ro}>Fill standard timeline</button><button class="btn" data-act="email-beo" ${S.beoSending?'disabled':''}>${S.beoSending?'Sending…':'Email BEO to team'}</button><button class="btn primary" data-act="copy-beo">Copy BEO as text</button></div></div>
+    <div class="row"><button class="btn" data-act="tl-template" ${ro}>Fill standard timeline</button><button class="btn" data-act="print-beo">Print BEO</button><button class="btn" data-act="email-beo" ${S.beoSending?'disabled':''}>${S.beoSending?'Sending…':'Email BEO to team'}</button><button class="btn primary" data-act="copy-beo">Copy BEO as text</button></div></div>
   <p class="muted" style="margin:-4px 0 12px;font-size:12px">${beoLink(ev.id)?`Team BEO page (read-only, no prices; linked in the Google Calendar): <a href="${esc(beoLink(ev.id))}" target="_blank" rel="noopener">open</a> · <button class="link" data-act="copy-beo-link">copy link</button>`:'Team BEO page link appears after the event is saved.'}${ev.beoReminder&&ev.beoReminder.status==='sent'?` · Automatic reminder sent ${esc(fmtTS(ev.beoReminder.at))}.`:''}</p>
   ${S.beoText!=null?`<div class="panel" style="margin-bottom:12px"><label for="beo-text">Copy didn’t work here. Select all and copy:</label><textarea id="beo-text" readonly style="min-height:200px;font-family:ui-monospace,monospace;font-size:12px">${esc(S.beoText)}</textarea></div>`:''}
   <div class="sheet">
@@ -940,6 +940,9 @@ document.addEventListener('click',e=>{
     case 'mail-test':sendTestMail();break;
     case 'cal-leads':S.calLeads=el.checked;render();break;
     case 'email-beo':emailBeo(S.eventId);break;
+    case 'print-beo':{const id=S.eventId;if(!beoLink(id)){toast('Saving… try again in a second');break;}
+      const w=window.open('about:blank','_blank'); // open now so the browser doesn't block it
+      (chains['ev:'+id]||Promise.resolve()).then(()=>{const l=beoLink(id)+'&print=1';if(w)w.location.href=l;else location.href=l;});break;}
     case 'copy-beo-link':{const l=beoLink(S.eventId);if(l&&navigator.clipboard)navigator.clipboard.writeText(l).then(()=>toast('BEO link copied'),()=>toast(l));else toast(l);break;}
     case 'gmail-connect':gmailConnect();break;
     case 'gmail-disconnect':gmailDisconnect();break;
