@@ -8,11 +8,12 @@ const MEMBERSHIPS_URL = (process.env.MEMBERSHIPS_URL || 'https://bandstand-membe
 let gmailCache = null;
 async function gmailAccount() {
   if (!process.env.MEMBERSHIPS_MAIL_SECRET) return null;
-  if (gmailCache) return gmailCache;
+  if (gmailCache && Date.now() - gmailCache.at < 30000) return gmailCache;
   try {
     const r = await fetch(`${MEMBERSHIPS_URL}/api/events-email/status`, { headers: { 'x-mail-secret': process.env.MEMBERSHIPS_MAIL_SECRET } });
     const j = await r.json();
-    if (r.ok && j.connected && j.email) return (gmailCache = { kind: 'gmail', from: j.email, connectedAt: j.connectedAt });
+    if (r.ok && j.connected && j.email) return (gmailCache = { kind: 'gmail', from: j.email, connectedAt: j.connectedAt, at: Date.now() });
+    gmailCache = null;
   } catch (e) { /* fall through */ }
   return null;
 }
