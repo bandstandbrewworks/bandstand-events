@@ -189,7 +189,13 @@ input:disabled,select:disabled,textarea:disabled{background:var(--surface-2)}
 #toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:8px;font-size:13px;display:none;z-index:9;max-width:90vw}
 #toast.show{display:block}
 .loading{padding:40px;color:var(--muted)}
+/* App identity: big app name under the logo (matches the distribution app's layout; events keeps copper) */
+#side{border-top:4px solid var(--accent)}
+.app-id{text-align:center;padding:0 4px;margin-top:-4px}
+.app-id .app-name{display:block;font:700 26px/1 var(--display);letter-spacing:.08em;text-transform:uppercase;color:#fff}
+.app-id .app-sub{display:block;font:600 11px/1.4 var(--body);letter-spacing:.16em;text-transform:uppercase;color:var(--gold);margin-top:6px}
 @media (max-width:820px){
+  .app-id{text-align:left;margin-top:0}.app-id .app-name{font-size:20px}.app-id .app-sub{display:none}
   #app{grid-template-columns:1fr;grid-template-rows:auto 1fr}
   #side{flex-direction:row;flex-wrap:wrap;align-items:center;gap:10px;padding:10px 12px}
   .brand{font-size:20px}.brand small{display:none}
