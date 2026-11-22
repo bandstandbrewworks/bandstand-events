@@ -50,7 +50,7 @@ const now0=new Date();
 const S={
   config:clone(DEFAULT_CONFIG), events:new Map(), view:'pipeline', eventId:null, tab:'details',
   calMonth:new Date(now0.getFullYear(),now0.getMonth(),1), calSpace:'all',
-  listQ:'', listStatus:'open', reportYear:now0.getFullYear(),
+  listQ:'', listStatus:'open', repPreset:'this-year', repFrom:'', repTo:'', repExpand:'',
   mode:'db', loaded:false, stale:false, dbError:null, readOnly:false,
   uid:null, email:'', tokens:{}, auth:'checking', authMsg:'', delArm:false, inquiryDone:null, draft:null, beoText:null, addItemSel:'', toastText:null
 };
@@ -767,40 +767,7 @@ function renderInquiry(){
   <div class="grid2"><div class="panel"><h3>Link</h3><p class="muted" style="margin-top:0">Use this for a “Book a private event” button on the website or social media.</p><div class="row"><input type="text" id="inq-url" readonly value="${esc(url)}" style="flex:1"><button class="btn sm" data-act="copy-field" data-field="inq-url">Copy</button></div></div>
   <div class="panel"><h3>Embed on the website</h3><p class="muted" style="margin-top:0">Paste this code into an HTML or embed block on the events page.</p><textarea id="inq-embed" readonly style="font-family:ui-monospace,monospace;font-size:12px">${esc(embed)}</textarea><button class="btn sm" data-act="copy-field" data-field="inq-embed" style="margin-top:8px">Copy code</button></div></div>`;
 }
-/* ---------- reports ---------- */
-function renderReports(){
-  const Y=String(S.reportYear);
-  const evs=evList();
-  const years=[...new Set([String(new Date().getFullYear()),...evs.map(e=>(e.date||'').slice(0,4)).filter(Boolean)])].sort();
-  const inYear=evs.filter(e=>(e.date||(e.createdAt||'').slice(0,10)).startsWith(Y));
-  const booked=inYear.filter(e=>e.status==='Definite'||e.status==='Completed');
-  const lost=inYear.filter(e=>e.status==='Lost');
-  const decided=booked.length+lost.length;
-  const rev=booked.reduce((a,e)=>a+totals(e).total,0);
-  const months=Array.from({length:12},(_,i)=>booked.filter(e=>(e.date||'').slice(5,7)===pad(i+1)).reduce((a,e)=>a+totals(e).total,0));
-  const maxM=Math.max(...months,1);
-  const src={}; inYear.forEach(e=>{const s=e.source||'Unknown';src[s]=src[s]||{n:0,b:0};src[s].n++;if(e.status==='Definite'||e.status==='Completed')src[s].b++;});
-  const srcRows=Object.entries(src).sort((a,b)=>b[1].n-a[1].n); const maxS=Math.max(1,...srcRows.map(r=>r[1].n));
-  const lr={}; lost.forEach(e=>{const r=e.lostReason||'No reason given';lr[r]=(lr[r]||0)+1}); const lrRows=Object.entries(lr).sort((a,b)=>b[1]-a[1]); const maxL=Math.max(1,...lrRows.map(r=>r[1]));
-  const sp={}; booked.forEach(e=>(e.spaceIds||[]).forEach(id=>{sp[id]=(sp[id]||0)+1})); const spRows=Object.entries(sp).sort((a,b)=>b[1]-a[1]); const maxSp=Math.max(1,...spRows.map(r=>r[1]));
-  return `${staleBanner()}<div class="page-head"><div><h1>Reports · ${Y}</h1><p>By event date. Booked means Definite or Completed.</p></div>
-    <select id="rep-year" data-ui="reportYear" style="width:auto" aria-label="Year">${years.map(y=>`<option ${y===Y?'selected':''}>${y}</option>`).join('')}</select></div>
-  <div class="tiles">
-    <div class="tile"><div class="k">Inquiries</div><div class="v">${inYear.length}</div></div>
-    <div class="tile"><div class="k">Booked events</div><div class="v">${booked.length}</div></div>
-    <div class="tile"><div class="k">Close rate</div><div class="v">${decided?Math.round(booked.length/decided*100)+'%':'—'}</div><div class="s">Booked ÷ (booked + lost)</div></div>
-    <div class="tile"><div class="k">Booked revenue</div><div class="v">${money0(rev)}</div></div>
-    <div class="tile"><div class="k">Avg event</div><div class="v">${booked.length?money0(rev/booked.length):'—'}</div></div>
-  </div>
-  <div class="panel" style="margin-bottom:16px"><h3>Booked revenue by month</h3>
-    <div class="bars" style="margin-top:22px">${months.map((v,i)=>`<div class="bar" style="height:${v/maxM*100}%" title="${money0(v)}">${v?`<b>${v>=1000?'$'+(v/1000).toFixed(v>=10000?0:1)+'k':money0(v)}</b>`:''}</div>`).join('')}</div>
-    <div class="bar-labels">${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map(m=>`<span>${m}</span>`).join('')}</div></div>
-  <div class="grid2">
-    <div class="panel"><h3>Lead sources</h3>${srcRows.length?srcRows.map(([s,v])=>`<div class="hbar"><span>${esc(s)}</span><span class="track"><span class="fill" style="display:block;width:${v.n/maxS*100}%"></span></span><span class="num">${v.n} · ${v.b} booked</span></div>`).join(''):'<p class="muted">No inquiries yet.</p>'}</div>
-    <div class="panel"><h3>Why we lost them</h3>${lrRows.length?lrRows.map(([s,v])=>`<div class="hbar"><span>${esc(s)}</span><span class="track"><span class="fill" style="display:block;width:${v/maxL*100}%;background:var(--s-lost)"></span></span><span class="num">${v}</span></div>`).join(''):'<p class="muted">No lost events.</p>'}</div>
-    <div class="panel"><h3>Booked by space</h3>${spRows.length?spRows.map(([s,v])=>`<div class="hbar"><span>${esc(spaceName(s))}</span><span class="track"><span class="fill" style="display:block;width:${v/maxSp*100}%;background:var(--s-def)"></span></span><span class="num">${v}</span></div>`).join(''):'<p class="muted">No booked events.</p>'}</div>
-  </div>`;
-}
+/* ---------- reports: see reports.js ---------- */
 
 /* ---------- settings ---------- */
 function renderEmailSettings(d,ro){
@@ -943,6 +910,9 @@ document.addEventListener('click',e=>{
     case 'mail-test':sendTestMail();break;
     case 'cal-leads':S.calLeads=el.checked;render();break;
     case 'email-beo':emailBeo(S.eventId);break;
+    case 'rep-xlsx':reportDownload('xlsx',el.dataset.sec);break;
+    case 'rep-pdf':reportDownload('pdf',el.dataset.sec);break;
+    case 'rep-more':S.repExpand=S.repExpand===el.dataset.sec?'':el.dataset.sec;render();break;
     case 'print-beo':{const id=S.eventId;if(!beoLink(id)){toast('Saving… try again in a second');break;}
       const w=window.open('about:blank','_blank'); // open now so the browser doesn't block it
       (chains['ev:'+id]||Promise.resolve()).then(()=>{const l=beoLink(id)+'&print=1';if(w)w.location.href=l;else location.href=l;});break;}
@@ -1022,7 +992,7 @@ document.addEventListener('change',e=>{
   if(t.hasAttribute('data-logo')&&t.files&&t.files[0]&&S.draft){readLogo(t.files[0]);return;}
   if(t.hasAttribute('data-import')&&t.files&&t.files[0]){readImportFile(t.files[0]);return;}
   if(t.dataset.cedit&&S.custEdit){S.custEdit[t.dataset.cedit]=t.value;scheduleRender();return;}
-  if(t.dataset.ui){const k=t.dataset.ui;S[k]=k==='reportYear'?Number(t.value):t.value;render();return;}
+  if(t.dataset.ui){const k=t.dataset.ui;S[k]=t.value;render();return;}
   if(t.hasAttribute('data-status')){const v=t.value;mutate(S.eventId,x=>{setStatus(x,v)});return;}
   if(t.dataset.space){const id=t.dataset.space,on=t.checked;mutate(S.eventId,x=>{x.spaceIds=x.spaceIds||[];x.spaceIds=on?[...new Set([...x.spaceIds,id])]:x.spaceIds.filter(s=>s!==id);if(!num(x.roomFee)&&!num(x.fbMinimum)||!x.items.length)applySpacePricing(x)},(on?'Added space: ':'Removed space: ')+spaceName(id));return;}
   if(t.dataset.bind){

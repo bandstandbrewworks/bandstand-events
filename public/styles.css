@@ -239,3 +239,13 @@ tr.sec-head th .muted{font-family:'IBM Plex Sans',sans-serif;font-size:12px;text
 .doc-pick .check{font-size:13px}
 .tpl-card{border:1px solid var(--line);border-radius:8px;padding:12px;margin-top:12px}
 label.btn input[hidden]{display:none}
+/* reports */
+.rep-controls{flex-wrap:wrap;gap:8px;justify-content:flex-end}
+.rep-sec{margin-bottom:16px}
+.rep-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:8px}
+.rep-head h3{margin:0}.rep-head p{margin:4px 0 0;font-size:13px}
+.rep-dl{display:flex;gap:6px;flex-shrink:0}
+.rep-tbl td,.rep-tbl th{white-space:nowrap}
+.rep-tbl td.num,.rep-tbl th.num{text-align:right;font-variant-numeric:tabular-nums}
+.rep-tbl tr.rep-total td{font-weight:700;border-top:2px solid var(--ink)}
+.rep-tiles{grid-template-columns:repeat(4,minmax(0,1fr))}@media (max-width:820px){.rep-tiles{grid-template-columns:repeat(2,minmax(0,1fr))}}
