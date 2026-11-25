@@ -83,6 +83,10 @@
     "api/beo-reminder.js": {
       "includeFiles": "public/core.js",
       "maxDuration": 60
+    },
+    "api/weekly-summary.js": {
+      "includeFiles": "public/core.js",
+      "maxDuration": 60
     }
   }
 }
