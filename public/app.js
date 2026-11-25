@@ -50,7 +50,7 @@ const now0=new Date();
 const S={
   config:clone(DEFAULT_CONFIG), events:new Map(), view:'pipeline', eventId:null, tab:'details',
   calMonth:new Date(now0.getFullYear(),now0.getMonth(),1), calSpace:'all',
-  listQ:'', listStatus:'open', repPreset:'this-year', repFrom:'', repTo:'', repExpand:'',
+  listQ:'', listStatus:'open', house:new Map(), music:[], houseEdit:null, repPreset:'this-year', repFrom:'', repTo:'', repExpand:'',
   mode:'db', loaded:false, stale:false, dbError:null, readOnly:false,
   uid:null, email:'', tokens:{}, auth:'checking', authMsg:'', delArm:false, inquiryDone:null, draft:null, beoText:null, addItemSel:'', toastText:null
 };
@@ -206,7 +206,7 @@ function fromHash(){
   let h='';try{h=location.hash.slice(1)}catch(e){}
   if(h.startsWith('event-')){S.view='event';S.eventId=h.slice(6);markSeen(S.eventId);}
   else if(h.startsWith('customer-')){S.view='customer';try{S.eventId=decodeURIComponent(h.slice(9))}catch(e){S.eventId=h.slice(9)}}
-  else if(['pipeline','calendar','events','customers','reports','import','inquiry','menu','library','settings'].includes(h)){S.view=h;if(isDraftView(h))S.draft=clone(S.config);}
+  else if(['pipeline','calendar','house','events','customers','reports','import','inquiry','menu','library','settings'].includes(h)){S.view=h;if(isDraftView(h))S.draft=clone(S.config);}
 }
 window.addEventListener('hashchange',()=>{fromHash();render()});
 
@@ -227,7 +227,7 @@ function render(){
 function renderSide(){
   const evs=evList();
   const open=evs.filter(e=>e.status==='Lead'||e.status==='Proposal Sent').length;
-  const nav=[['pipeline','Pipeline',open],['calendar','Calendar',''],['events','All events',evs.length||''],['customers','Customers',customers().length||''],['reports','Reports',''],['import','Import',''],['inquiry','Website form',''],['menu','Menu & packages',S.config.catalog.length||''],['library','Templates & docs',''],['settings','Settings','']];
+  const nav=[['pipeline','Pipeline',open],['calendar','Calendar',''],['house','House & music',''],['events','All events',evs.length||''],['customers','Customers',customers().length||''],['reports','Reports',''],['import','Import',''],['inquiry','Website form',''],['menu','Menu & packages',S.config.catalog.length||''],['library','Templates & docs',''],['settings','Settings','']];
   const on=S.view==='event'?'':S.view==='customer'?'customers':S.view;
   const nl=newLeads().length;
   let status;
@@ -244,6 +244,7 @@ function renderMain(){
   if(!S.loaded) return '<div class="loading">Loading events…</div>';
   switch(S.view){
     case 'calendar':return renderCalendar();
+    case 'house':return renderHouse();
     case 'events':return renderEvents();
     case 'customers':return renderCustomers();
     case 'import':return renderImport();
@@ -268,7 +269,7 @@ function card(e){
   const t=totals(e), conf=conflicts(e).some(c=>c.hold);
   const due=e.followUp&&ACTIVE.includes(e.status)&&e.status!=='Definite'&&e.followUp<=todayISO();
   return `<article class="card ${sc(e.status)}" draggable="true" data-drag="${esc(e.id)}" data-act="open-event" data-id="${esc(e.id)}" tabindex="0" role="button" aria-label="Open ${esc(e.title)}">
-    <div class="row between"><span class="meta">${esc(fmtShort(e.date))}${e.start?' · '+esc(fmtTime(e.start)):''}</span><span>${isNewLead(e)?'<span class="flag ok">New</span> ':''}${unreadReplies(e.id)?'<span class="flag warn">New reply</span> ':''}${conf?'<span class="flag">Conflict</span>':(()=>{const p=queuePos(e);return p===1?'<span class="flag ok">1st right</span>':p>1?`<span class="flag warn">${ordinal(p)} in line</span>`:''})()}</span></div>
+    <div class="row between"><span class="meta">${esc(fmtShort(e.date))}${e.start?' · '+esc(fmtTime(e.start)):''}</span><span>${isNewLead(e)?'<span class="flag ok">New</span> ':''}${unreadReplies(e.id)?'<span class="flag warn">New reply</span> ':''}${sameDayBadges(e.date)}${conf?'<span class="flag">Conflict</span>':(()=>{const p=queuePos(e);return p===1?'<span class="flag ok">1st right</span>':p>1?`<span class="flag warn">${ordinal(p)} in line</span>`:''})()}</span></div>
     <h4>${esc(e.title||'Untitled event')}</h4>
     <div class="meta">${esc(e.client&&e.client.name||'No contact yet')} · ${num(e.guests)} guests</div>
     ${(e.spaceIds||[]).length?`<div class="chips">${e.spaceIds.map(id=>`<span class="chip">${esc(spaceName(id))}</span>`).join('')}</div>`:''}
@@ -325,16 +326,17 @@ function renderCalendar(){
       <span class="dn">${d.getDate()}</span>
       ${list.slice(0,4).map(e=>{const lead=isHoldOnly(e),pos=queuePos(e);return `<button class="ev-chip ${sc(e.status)} ${lead?'lead-hold':''}" data-act="open-event" data-id="${esc(e.id)}" title="${esc((lead?'LEAD ONLY (not booked) · '+e.status:e.status)+': '+e.title+' · '+(e.spaceIds||[]).map(spaceName).join(', ')+(pos?' · '+ordinal(pos)+' request for this space/time':''))}">${lead?'<b class="lead-tag">Lead</b> ':''}${pos>1?`<b class="q-tag">${ordinal(pos)}</b> `:''}${esc(fmtTime(e.start).replace(':00','').replace(' ',''))} ${esc(e.title)}</button>`}).join('')}
       ${list.length>4?`<span class="muted" style="font-size:11px">+${list.length-4} more</span>`:''}
+      ${calendarExtras(iso)}
     </div>`;
   }
   const monthEvs=evList().filter(e=>e.date&&e.date.startsWith(y+'-'+pad(mo+1)));
   const clashes=[]; const seen=new Set();
   monthEvs.forEach(e=>conflicts(e).forEach(c=>{const k=[e.id,c.ev.id].sort().join('|');if(seen.has(k))return;seen.add(k);const q=requestQueue(e);const [a,b]=q.indexOf(e)<q.indexOf(c.ev)?[e,c.ev]:[c.ev,e];clashes.push([a,b])}));
   clashes.sort((x,y)=>byDate(x[0],y[0]));
-  return `${staleBanner()}<div class="page-head"><div><h1>${m.toLocaleDateString('en-US',{month:'long',year:'numeric'})}</h1><p>Click an empty part of a day to start an event on that date.</p></div>
+  return `${staleBanner()}<div class="page-head"><div><h1>${m.toLocaleDateString('en-US',{month:'long',year:'numeric'})}</h1><p>Click an empty part of a day to start an event on that date. House events and live music are shown for information and never block a booking.</p></div>
     <div class="row"><label for="cal-space" class="lbl">Space</label><select id="cal-space" data-ui="calSpace" style="width:auto"><option value="all">All spaces</option>${S.config.spaces.map(s=>`<option value="${esc(s.id)}" ${S.calSpace===s.id?'selected':''}>${esc(s.name)}</option>`).join('')}</select>
-    <button class="btn" data-act="cal-move" data-n="-1" aria-label="Previous month">‹ Prev</button><button class="btn" data-act="cal-today">Today</button><button class="btn" data-act="cal-move" data-n="1" aria-label="Next month">Next ›</button></div></div>
-  <div class="row between" style="margin-bottom:10px;flex-wrap:wrap;gap:8px"><div class="legend">${STATUSES.filter(s=>s!=='Lost').map(s=>`<span class="pill ${sc(s)}">${s}</span>`).join('')}<span class="ev-chip lead-hold s-lead" style="display:inline-block;width:auto"><b class="lead-tag">Lead</b> Not booked: date held for the inquiry</span><span class="flag">Red outline = double-booked</span><span class="flag warn">Gold outline = competing requests</span></div>
+    ${S.readOnly?'':'<button class="btn" data-act="house-new">+ House event</button>'}<button class="btn" data-act="cal-move" data-n="-1" aria-label="Previous month">‹ Prev</button><button class="btn" data-act="cal-today">Today</button><button class="btn" data-act="cal-move" data-n="1" aria-label="Next month">Next ›</button></div></div>
+  <div class="row between" style="margin-bottom:10px;flex-wrap:wrap;gap:8px"><div class="legend">${STATUSES.filter(s=>s!=='Lost').map(s=>`<span class="pill ${sc(s)}">${s}</span>`).join('')}<span class="ev-chip lead-hold s-lead" style="display:inline-block;width:auto"><b class="lead-tag">Lead</b> Not booked: date held for the inquiry</span><span class="flag">Red outline = double-booked</span><span class="flag warn">Gold outline = competing requests</span><span class="cal-info house" style="display:inline-block;width:auto">🏠 House event</span><span class="cal-info music" style="display:inline-block;width:auto">🎵 Live music</span><span class="muted" style="font-size:12px">(information only)</span></div>
     <label class="check" for="cal-leads"><input type="checkbox" id="cal-leads" data-act="cal-leads" ${showLeads?'checked':''}> Show leads</label></div>
   <div class="cal">${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=>`<div class="dow">${d}</div>`).join('')}${cells}</div>
   <div class="panel" style="margin-top:16px"><h3>Conflicts &amp; competing requests this month</h3>${clashes.length?`<p class="muted" style="margin-top:0;font-size:13px">“First right” is the booked event, or if neither is booked, whoever inquired first. Offer them the date before committing it to the other request.</p><div class="tbl-wrap"><table><thead><tr><th>Date</th><th>First right</th><th>Also wants it</th><th>Shared space</th></tr></thead><tbody>${clashes.map(([a,b])=>`<tr><td>${esc(fmtShort(a.date))}</td><td><button class="link" data-act="open-event" data-id="${esc(a.id)}">${esc(a.title)}</button> <span class="pill ${sc(a.status)}">${a.status}</span><div class="muted" style="font-size:12px">Inquired ${esc(fmtShort(inquiredOn(a)))}</div></td><td><button class="link" data-act="open-event" data-id="${esc(b.id)}">${esc(b.title)}</button> <span class="pill ${sc(b.status)}">${b.status}</span><div class="muted" style="font-size:12px">Inquired ${esc(fmtShort(inquiredOn(b)))}</div></td><td>${esc([...new Set([...(a.spaceIds||[]),...(b.spaceIds||[])])].map(spaceName).join(', '))}</td></tr>`).join('')}</tbody></table></div>`:'<p class="muted" style="margin:0">No overlapping events or requests this month.</p>'}</div>`;
@@ -578,7 +580,7 @@ function renderDetail(){
     <select id="f-status" data-status aria-label="Status" style="width:auto" ${S.readOnly?'disabled':''}>${STATUSES.map(s=>`<option ${s===ev.status?'selected':''}>${s}</option>`).join('')}</select><span class="pill ${sc(ev.status)}">${ev.status}</span></div>
     <div class="meta">${esc(fmtDate(ev.date))}${ev.start?' · '+esc(fmtTime(ev.start))+'–'+esc(fmtTime(ev.end)):''} · ${num(ev.guests)} guests · ${esc((ev.spaceIds||[]).map(spaceName).join(', ')||'No space chosen')} · ${esc(ev.client&&ev.client.name||'No contact')}</div></div>
     <div class="det-money"><div class="tile"><div class="k">Total</div><div class="v">${money0(t.total)}</div></div><div class="tile"><div class="k">Balance</div><div class="v">${money0(t.balance)}</div><div class="s">${money0(t.paid)} paid</div></div></div></div>
-  ${banner}
+  ${banner}${sameDayNotice(ev)}
   <div class="tabs" role="tablist">${tabs.map(([k,l])=>`<button class="tab ${S.tab===k?'on':''}" role="tab" aria-selected="${S.tab===k}" data-act="tab" data-tab="${k}">${l}</button>`).join('')}</div>
   ${body}`;
 }
@@ -902,9 +904,10 @@ function renderSettings(){
 /* ---------- events: clicks ---------- */
 document.addEventListener('click',e=>{
   const el=e.target.closest('[data-act]'); if(!el) return;
-  if(el.dataset.act==='cal-new'&&e.target.closest('.ev-chip')) return;
+  if(el.dataset.act==='cal-new'&&e.target.closest('.ev-chip,.cal-info.music')) return;
   const act=el.dataset.act, ev=S.events.get(S.eventId);
   if(mailAct(act,el,ev))return;
+  if(act.startsWith('house-')){houseAction(act,el);return;}
   switch(act){
     case 'nav':go(el.dataset.view);break;
     case 'mail-test':sendTestMail();break;
@@ -986,9 +989,11 @@ document.addEventListener('input',e=>{if(e.target.classList&&e.target.classList.
   if(e.target.dataset.ui==='listQ'){S.listQ=e.target.value;scheduleRender();}
   if(e.target.dataset.ui==='custQ'){S.custQ=e.target.value;scheduleRender();}
   if(e.target.dataset.ui==='menuQ'){S.menuQ=e.target.value;scheduleRender();}
-  if(e.target.dataset.cedit&&S.custEdit&&e.target.type!=='radio'){S.custEdit[e.target.dataset.cedit]=e.target.value;}});
+  if(e.target.dataset.cedit&&S.custEdit&&e.target.type!=='radio'){S.custEdit[e.target.dataset.cedit]=e.target.value;}
+  if(e.target.dataset.house&&S.houseEdit&&e.target.type!=='checkbox'&&e.target.tagName!=='SELECT'){S.houseEdit[e.target.dataset.house]=e.target.value;}});
 document.addEventListener('change',e=>{
   const t=e.target;
+  if(t.dataset.house||t.dataset.houseRoom){houseInput(t);return;}
   if(t.hasAttribute('data-logo')&&t.files&&t.files[0]&&S.draft){readLogo(t.files[0]);return;}
   if(t.hasAttribute('data-import')&&t.files&&t.files[0]){readImportFile(t.files[0]);return;}
   if(t.dataset.cedit&&S.custEdit){S.custEdit[t.dataset.cedit]=t.value;scheduleRender();return;}
@@ -1052,6 +1057,7 @@ async function loadAll(){
   if(!seen){loadSeen();const nl=newLeads();if(nl.length&&!S.leadAlert)announceLead(nl[0]);}
   S.loaded=true;S.stale=false;scheduleRender();
   mailAfterLoad();
+  houseAfterLoad();
 }
 let channel=null;
 function subscribe(){
@@ -1067,6 +1073,7 @@ function subscribe(){
     })
     .on('postgres_changes',{event:'INSERT',schema:'public',table:'private_event_emails'},p=>mailRealtime(p))
     .on('postgres_changes',{event:'*',schema:'public',table:'private_event_documents'},()=>docsRealtime())
+    .on('postgres_changes',{event:'*',schema:'public',table:'house_events'},p=>houseRealtime(p))
     .subscribe(st=>{S.stale=(st==='CHANNEL_ERROR'||st==='TIMED_OUT');scheduleRender();});
 }
 async function afterLogin(){
