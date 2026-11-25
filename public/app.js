@@ -38,6 +38,8 @@ const DEFAULT_CONFIG={
   leadAlertTo:'erin@bandstandbrewworks.com', replyTo:'erin@bandstandbrewworks.com',
   beoReminderOn:true, beoReminderHours:36,
   beoReminderTo:'erin@bandstandbrewworks.com, deane@bandstandbrewworks.com, adam@bandstandbrewworks.com, laurie@bandstandbrewworks.com, darby@bandstandbrewworks.com',
+  weeklySummaryOn:true,
+  weeklySummaryTo:'erin@bandstandbrewworks.com, deane@bandstandbrewworks.com, adam@bandstandbrewworks.com, laurie@bandstandbrewworks.com, darby@bandstandbrewworks.com',
   staff:['Laurie','Darby','Adam'],
   eventTypes:['Private party','Corporate','Wedding / rehearsal','Birthday','Fundraiser','Holiday party','Ticketed show','Other'],
   sources:['Website form','Phone','Email','Walk-in','Repeat client','Referral','Social media'],
@@ -801,7 +803,18 @@ function renderEmailSettings(d,ro){
     <div class="f"><span class="lbl">Reminder</span><label class="check" for="s-beoReminderOn"><input type="checkbox" id="s-beoReminderOn" data-sbind="beoReminderOn" data-type="bool" ${d.beoReminderOn!==false?'checked':''} ${ro}> Send automatically</label></div>
     <div class="f"><label for="s-beoReminderHours">Hours before the event</label><input class="cell-in" id="s-beoReminderHours" type="number" min="1" max="336" step="1" data-type="num" data-sbind="beoReminderHours" value="${esc(d.beoReminderHours==null?36:d.beoReminderHours)}" ${ro}></div>
     <div class="f wide"><label for="s-beoReminderTo">Send to (separate with commas)</label><textarea id="s-beoReminderTo" data-sbind="beoReminderTo" style="min-height:60px" ${ro}>${esc(d.beoReminderTo||'')}</textarea></div>
-  </div></div>`;
+  </div></div>
+  <div class="panel" style="margin-bottom:16px"><h3>Weekly summary email</h3>
+  <p class="muted" style="margin-top:0;font-size:13px">Every Monday morning (8 AM in winter, 9 AM in summer) the team gets one email covering last week and this week: private events, live music and distribution. It comes from the same account as the lead emails.</p>
+  <div class="fields">
+    <div class="f"><span class="lbl">Summary</span><label class="check" for="s-weeklySummaryOn"><input type="checkbox" id="s-weeklySummaryOn" data-sbind="weeklySummaryOn" data-type="bool" ${d.weeklySummaryOn!==false?'checked':''} ${ro}> Send every Monday</label></div>
+    <div class="f wide"><label for="s-weeklySummaryTo">Send to (separate with commas)</label><textarea id="s-weeklySummaryTo" data-sbind="weeklySummaryTo" style="min-height:60px" ${ro}>${esc(d.weeklySummaryTo||'')}</textarea></div>
+  </div>
+  <div class="row" style="gap:8px;margin-top:10px"><button class="btn" data-act="weekly-preview" ${S.weeklyBusy?'disabled':''}>${S.weeklyBusy==='preview'?'Loading…':'Preview this week’s summary'}</button><button class="btn" data-act="weekly-test" ${S.weeklyBusy?'disabled':''}>${S.weeklyBusy==='test'?'Sending…':'Email me a test'}</button></div>
+  ${S.weeklyPreview?`<pre class="weekly-preview"><b>${esc(S.weeklyPreview.subject)}</b>
+
+${esc(S.weeklyPreview.text)}</pre>`:''}
+  </div>`;
 }
 async function loadMailStatus(){
   S.mailStatusLoading=true;
@@ -822,6 +835,18 @@ function gmailReturnNotice(){
   if(!q.has('gmail')&&!q.has('gmail_error'))return;
   setTimeout(()=>toast(q.has('gmail')?'Gmail connected. New-lead emails will send from it.':'Gmail not connected: '+q.get('gmail_error')),300);
   try{history.replaceState(null,'',location.pathname+location.hash)}catch(e){}
+}
+async function weeklySummary(kind){
+  if(S.weeklyBusy)return;S.weeklyBusy=kind;render();
+  try{
+    const {data:{session}}=await sb.auth.getSession();
+    const r=await fetch('/api/weekly-summary',{method:'POST',headers:{'Content-Type':'application/json',Authorization:'Bearer '+(session&&session.access_token||'')},body:JSON.stringify(kind==='preview'?{preview:true}:{})});
+    const j=await r.json().catch(()=>({}));
+    if(!r.ok)toast('Weekly summary: '+(j.error||r.status));
+    else if(kind==='preview')S.weeklyPreview=j;
+    else toast('Test summary sent to '+j.to);
+  }catch(e){toast('Weekly summary: '+e.message);}
+  S.weeklyBusy=null;render();
 }
 async function emailBeo(id){
   if(S.beoSending)return;
@@ -913,6 +938,8 @@ document.addEventListener('click',e=>{
     case 'mail-test':sendTestMail();break;
     case 'cal-leads':S.calLeads=el.checked;render();break;
     case 'email-beo':emailBeo(S.eventId);break;
+    case 'weekly-preview':weeklySummary('preview');break;
+    case 'weekly-test':weeklySummary('test');break;
     case 'rep-xlsx':reportDownload('xlsx',el.dataset.sec);break;
     case 'rep-pdf':reportDownload('pdf',el.dataset.sec);break;
     case 'rep-more':S.repExpand=S.repExpand===el.dataset.sec?'':el.dataset.sec;render();break;

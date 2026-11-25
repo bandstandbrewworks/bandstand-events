@@ -263,3 +263,5 @@ label.btn input[hidden]{display:none}
 .house-rooms{flex-wrap:wrap;gap:14px}
 .btn.danger{color:var(--bad-ink);border-color:var(--bad-ink)}
 @media (max-width:820px){.house-fields .wide{grid-column:auto}}
+
+.weekly-preview{white-space:pre-wrap;background:var(--surface-2);border:1px solid var(--line);border-radius:8px;padding:12px 14px;margin-top:12px;font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,monospace;max-height:520px;overflow:auto}
